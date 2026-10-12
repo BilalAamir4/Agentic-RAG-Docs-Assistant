@@ -10,6 +10,7 @@
 - **Choice:** Everything on Vercel (static UI + FastAPI Python function).
 - **Reason:** Free tier hosting with serverless functions and CDN static file delivery.
 - **Gate:** In M01: bundle over 400 MB or cold start over 10 s means backend moves to a Hugging Face Docker Space.
+- **Gate Decision (M01):** PASS. Local bundle-check: 223.19 MB; Vercel function bundle: 76.0 MB compressed, 230.7 MB uncompressed (limit 400 MB). First live /api/health call: 1.13 s (limit 10 s); runtime dependency import probe: 1876.04 ms.
 
 ### D3 Frontend Technology
 - **Decision:** User interface build stack.

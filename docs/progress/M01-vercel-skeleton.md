@@ -1,5 +1,5 @@
 M01: Vercel walking skeleton
-Status: Partial
+Status: Done
 Date: 2026-10-12
 
 Resume audit (2026-10-12)
@@ -65,8 +65,8 @@ What was built
 - `tests/test_api_health.py`: TestClient unit tests for `/api/health` and `/api/deps-probe`.
 - `tests/test_import_boundaries.py`: Subprocess boundary test verifying no ingest/eval imports.
 - `.vercelignore`: Appended `pyproject.toml` to ensure Vercel installs dependencies from `requirements.txt`.
-- `docs/DECISIONS.md`: Appended D13 decision regarding Vercel runtime dependency source.
-- `docs/progress/M01-vercel-skeleton.md`: Resume audit and module implementation tracking.
+- `docs/DECISIONS.md`: Appended D13 decision and recorded D2 gate results.
+- `docs/progress/M01-vercel-skeleton.md`: Complete audit, implementation, and verification tracking.
 
 How to run
 - Lint checks: `py tasks.py lint`
@@ -75,19 +75,19 @@ How to run
 - Local dev server: `py tasks.py dev`
 
 Verification
-- `py tasks.py lint`:
+- Local lint checks (`py tasks.py lint`):
   ```text
   All checks passed!
   29 files already formatted
   Running ruff check...
   Running ruff format --check...
   ```
-- `py tasks.py test`:
+- Local unit tests (`py tasks.py test`):
   ```text
   ..................                                                       [100%]
   18 passed in 1.04s
   ```
-- `py tasks.py bundle-check`:
+- Local bundle check (`py tasks.py bundle-check`):
   ```text
   Total bundle size: 223.19 MB (limit: 400.00 MB)
 
@@ -113,16 +113,41 @@ Verification
     `{"status":"ok","env":"local","python":"3.12.9","commit":"local"}`
   - `curl.exe -s http://127.0.0.1:8000/api/deps-probe`:
     `{"packages":[{"name":"fastapi","version":"0.143.0","import_ms":0.01},{"name":"pydantic","version":"2.14.1","import_ms":0.01},{"name":"pydantic-settings","version":"2.15.0","import_ms":0.01},{"name":"numpy","version":"2.5.4","import_ms":82.08},{"name":"rank-bm25","version":"0.2.2","import_ms":0.83},{"name":"httpx","version":"0.28.1","import_ms":38.07},{"name":"langchain-core","version":"1.6.10","import_ms":3.53},{"name":"langgraph","version":"1.2.14","import_ms":0.43},{"name":"langchain-groq","version":"1.1.3","import_ms":535.6},{"name":"google-genai","version":"2.29.0","import_ms":339.83},{"name":"cohere","version":"7.2.0","import_ms":0.9},{"name":"tavily-python","version":"0.8.5","import_ms":174.94},{"name":"upstash-redis","version":"1.8.0","import_ms":13.22},{"name":"upstash-ratelimit","version":"1.2.0","import_ms":3.47}],"total_ms":1192.92}`
+- Vercel Deployment Verification:
+  - Production URL: `https://agentic-rag-docs-assistant.vercel.app/`
+  - Vercel Build Log confirmation:
+    - Built from commit: `c7aa86d`
+    - Ignored `/pyproject.toml` per `.vercelignore`
+    - `Using Python 3.12 from .python-version`
+    - `Installing required dependencies from requirements.txt...`
+    - `Compiling Python bytecode...`
+  - Bundle Size:
+    - Vercel function bundle: `76.0 MB` (Compressed) / `230.7 MB` (Uncompressed)
+    - Local bundle-check: `223.19 MB`
+  - Live Endpoint Timing (`curl.exe -s -o NUL -w "%{http_code} %{time_total}\n" https://agentic-rag-docs-assistant.vercel.app/api/health` 5x):
+    ```text
+    200 1.131172
+    200 0.619251
+    200 0.915522
+    200 0.626013
+    200 0.556620
+    ```
+  - Live Endpoint Payload (`https://agentic-rag-docs-assistant.vercel.app/api/health`):
+    `{"status":"ok","env":"production","python":"3.12.14","commit":"c7aa86d"}`
+  - Live Dependency Probe (`https://agentic-rag-docs-assistant.vercel.app/api/deps-probe`):
+    `{"packages":[{"name":"fastapi","version":"0.143.0","import_ms":0.01},{"name":"pydantic","version":"2.14.1","import_ms":0.01},{"name":"pydantic-settings","version":"2.15.0","import_ms":0.01},{"name":"numpy","version":"2.5.4","import_ms":360.42},{"name":"rank-bm25","version":"0.2.2","import_ms":1.7},{"name":"httpx","version":"0.28.1","import_ms":68.3},{"name":"langchain-core","version":"1.6.10","import_ms":3.77},{"name":"langgraph","version":"1.2.14","import_ms":0.2},{"name":"langchain-groq","version":"1.1.3","import_ms":638.65},{"name":"google-genai","version":"2.29.0","import_ms":470.92},{"name":"cohere","version":"7.2.0","import_ms":4.66},{"name":"tavily-python","version":"0.8.5","import_ms":281.33},{"name":"upstash-redis","version":"1.8.0","import_ms":40.36},{"name":"upstash-ratelimit","version":"1.2.0","import_ms":5.7}],"total_ms":1876.04}`
+    All 14 runtime packages from requirements.txt confirmed present and loaded.
 
 Decisions made
-- D13 added to `docs/DECISIONS.md`: `.vercelignore` ignores `pyproject.toml` so Vercel installs runtime dependencies directly from `requirements.txt`.
-- Multi-platform Linux wheel resolution in `tools/bundle_size.py`: Added `--platform manylinux_2_28_x86_64` alongside `--platform manylinux2014_x86_64` because NumPy 2.5.4 dropped manylinux2014 (glibc 2.17) in favor of glibc 2.28, which Vercel (AL2023 glibc 2.34) fully supports.
+- D2 Gate Decided: PASS (bundle size 223.19 MB local / 230.7 MB uncompressed Vercel < 400 MB; first call latency 1.13 s < 10 s). Recorded in `docs/DECISIONS.md`.
+- D13: `.vercelignore` ignores `pyproject.toml` so Vercel installs runtime dependencies directly from `requirements.txt`.
+- Linux wheel multi-platform in `tools/bundle_size.py`: added `--platform manylinux_2_28_x86_64` alongside `--platform manylinux2014_x86_64` because NumPy 2.5.4 requires glibc 2.28 wheels, which Vercel AL2023 (glibc 2.34) fully supports.
 
 Deviations from the prompt
 - `tools/bundle_size.py`: added `--platform manylinux_2_28_x86_64` in pip install flags so `numpy==2.5.4` binary wheel resolves on Windows without error.
 
 Known issues and limitations
-- Pending live deployment latency and bundle measurement for D2 gate confirmation.
+None.
 
 Open questions for the human
 None.
@@ -131,4 +156,4 @@ Proposed follow-ups (out of scope)
 None.
 
 Prerequisites for the next module
-M01 live deployment verified and D2 gate recorded.
+M01 complete; M02 docs ingestion and chunking can proceed.
