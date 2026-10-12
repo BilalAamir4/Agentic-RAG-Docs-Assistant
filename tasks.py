@@ -214,13 +214,24 @@ def cmd_validate_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
 
 
 def cmd_dev(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M10", file=sys.stderr)
-    return 1
+    py = ensure_venv_exists()
+    cmd = [
+        str(py),
+        "-m",
+        "uvicorn",
+        "ragdocs.api.app:app",
+        "--reload",
+        "--port",
+        "8000",
+    ] + extra_args
+    return run_command(cmd)
 
 
 def cmd_bundle_check(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M01", file=sys.stderr)
-    return 1
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "tools" / "bundle_size.py"
+    cmd = [str(py), str(script), "--limit-mb", "400"] + extra_args
+    return run_command(cmd)
 
 
 def cmd_smoke(args: argparse.Namespace, extra_args: list[str]) -> int:

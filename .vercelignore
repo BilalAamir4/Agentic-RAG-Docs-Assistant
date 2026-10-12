@@ -11,3 +11,4 @@ docs
 src/ragdocs/ingest
 src/ragdocs/eval
 tasks.py
+pyproject.toml

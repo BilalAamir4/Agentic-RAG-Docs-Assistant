@@ -63,3 +63,8 @@
 - **Reason:** The project folder lives on Windows, while CI and Vercel run Linux.
 
 ## Decisions added during development
+
+### D13 Runtime Dependency Source on Vercel
+- **Decision:** Vercel ignores `pyproject.toml` via `.vercelignore` so it installs runtime dependencies from `requirements.txt`, which stays the single source of runtime dependencies.
+- **Choice:** Add `pyproject.toml` to `.vercelignore`.
+- **Reason:** Vercel's runtime package loader (`@vercel/python-analysis` in `loadPythonManifest`, verified at `https://github.com/vercel/vercel/blob/main/packages/python-analysis/src/manifest/package.ts#L426-L460` and `https://vercel.com/docs/functions/runtimes/python`) prioritizes `pyproject.toml` over `requirements.txt`. Since `pyproject.toml` has `dependencies = []` by project design, ignoring `pyproject.toml` causes Vercel to install dependencies from `requirements.txt`.
