@@ -1,0 +1,29 @@
+[project]
+name = "ragdocs"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Runtime dependencies live in requirements.txt; leave this list empty.
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "live: calls a real external API; skipped unless -m live",
+]
+addopts = "-q"

@@ -1,0 +1,13 @@
+data/raw
+data/processed
+data/eval
+results
+cache
+tests
+tools
+scripts
+docs
+.venv
+src/ragdocs/ingest
+src/ragdocs/eval
+tasks.py

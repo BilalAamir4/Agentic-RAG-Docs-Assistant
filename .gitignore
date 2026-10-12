@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+data/raw/
+cache/
+.pytest_cache/
+.ruff_cache/
+.vercel/
+*.egg-info/
+.DS_Store
+Thumbs.db
+desktop.ini
