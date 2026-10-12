@@ -1,0 +1,9 @@
+{
+  "repo_url": "https://github.com/langchain-ai/docs",
+  "commit": "a6e223d2f67558caa20589a03443e918b582943b",
+  "docs_root": "src/oss/langgraph",
+  "base_url": "https://docs.langchain.com/oss/python/langgraph",
+  "fetched_at": "2026-10-12",
+  "n_pages": 41,
+  "n_chunks": 553
+}

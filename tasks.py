@@ -27,6 +27,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+DOCS_REPO_URL = "https://github.com/langchain-ai/docs"
+DOCS_COMMIT = "a6e223d2f67558caa20589a03443e918b582943b"
+DOCS_ROOT = "src/oss/langgraph"
+
 if sys.platform == "win32":
     try:
         if sys.stdout.encoding != "utf-8":
@@ -194,8 +198,19 @@ def cmd_hash(args: argparse.Namespace, extra_args: list[str]) -> int:
 
 
 def cmd_ingest(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M02", file=sys.stderr)
-    return 1
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "scripts" / "ingest.py"
+    cmd = [
+        str(py),
+        str(script),
+        "--repo-url",
+        DOCS_REPO_URL,
+        "--commit",
+        DOCS_COMMIT,
+        "--docs-root",
+        DOCS_ROOT,
+    ] + extra_args
+    return run_command(cmd)
 
 
 def cmd_index(args: argparse.Namespace, extra_args: list[str]) -> int:

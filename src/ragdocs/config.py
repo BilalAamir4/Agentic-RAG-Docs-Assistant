@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     max_regenerations: int = 1
 
     # Documentation corpus domain (set in M02)
-    docs_domain: str = ""
+    docs_domain: str = "docs.langchain.com"
 
     # Repository paths
     data_dir: Path = Field(default_factory=lambda: REPO_ROOT / "data")
