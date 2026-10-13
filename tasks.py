@@ -224,8 +224,13 @@ def cmd_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
 
 
 def cmd_validate_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M03", file=sys.stderr)
-    return 1
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "scripts" / "validate_eval.py"
+    cmd = [str(py), str(script)]
+    if args.require_verified:
+        cmd.append("--require-verified")
+    cmd.extend(extra_args)
+    return run_command(cmd)
 
 
 def cmd_dev(args: argparse.Namespace, extra_args: list[str]) -> int:
