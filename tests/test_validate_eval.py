@@ -5,11 +5,17 @@ from typing import Any
 
 import pytest
 
+from ragdocs.eval.absence import (
+    build_term_regex,
+    check_all_unanswerable_absence,
+)
+from ragdocs.eval.config import MIN_REAL_SOURCES
 from ragdocs.eval.validate import (
+    check_sources,
     find_4gram_overlaps,
     validate_eval_dataset,
 )
-from ragdocs.schemas import EvalItem
+from ragdocs.schemas import EvalItem, Evidence
 
 
 @pytest.fixture
@@ -73,7 +79,9 @@ def make_valid_50_items() -> list[dict[str, Any]]:
                 "evidence": [{"doc_path": f"page{page_idx}.mdx", "anchor": "section-a"}],
                 "must_mention": ["SqliteSaver"],
                 "source": (
-                    "https://github.com/langchain-ai/langgraph/issues/100" if i <= 20 else "docs"
+                    "https://github.com/langchain-ai/langgraph/issues/100"
+                    if i <= MIN_REAL_SOURCES
+                    else "docs"
                 ),
                 "notes": "",
                 "verified": False,
@@ -204,7 +212,7 @@ def test_unanswerable_with_reference_answer_rejected():
         )
 
 
-def test_require_verified_flag(tiny_chunks):
+def test_require_verified_flag(tiny_chunks, tmp_path):
     """Verify that require_verified enforces verified=True across all items."""
     # Build 16 mock chunk pages to satisfy page spread and evidence resolution
     mock_chunks = []
@@ -238,13 +246,214 @@ def test_require_verified_flag(tiny_chunks):
     items = make_valid_50_items()
     raw_lines = [json.dumps(it) for it in items]
 
+    quotes_path = tmp_path / "source_quotes.json"
+    snapshots_dir = tmp_path / "source_snapshots"
+    snapshots_dir.mkdir()
+    quotes_data = {}
+    for it in items:
+        if it["source"] != "docs":
+            quotes_data[it["id"]] = {"url": it["source"]}
+            (snapshots_dir / f"{it['id']}.txt").write_text("Title: Mock", encoding="utf-8")
+    quotes_path.write_text(json.dumps(quotes_data), encoding="utf-8")
+
     # Without require_verified: passes
-    report_unverified = validate_eval_dataset(raw_lines, mock_chunks, require_verified=False)
+    report_unverified = validate_eval_dataset(
+        raw_lines,
+        mock_chunks,
+        require_verified=False,
+        quotes_path=quotes_path,
+        snapshots_dir=snapshots_dir,
+    )
     assert report_unverified.passed
 
     # With require_verified: fails because verified=False
-    report_verified = validate_eval_dataset(raw_lines, mock_chunks, require_verified=True)
+    report_verified = validate_eval_dataset(
+        raw_lines,
+        mock_chunks,
+        require_verified=True,
+        quotes_path=quotes_path,
+        snapshots_dir=snapshots_dir,
+    )
     assert not report_verified.passed
     ver_check = next(c for c in report_verified.checks if c.name == "Verification status")
     assert not ver_check.passed
     assert "0/50" in ver_check.details
+
+
+def test_check_sources_threshold():
+    """Verify check_sources enforces MIN_REAL_SOURCES."""
+    # When real sources == MIN_REAL_SOURCES: passes
+    items_pass = [
+        EvalItem(
+            id=f"q{i:03d}",
+            question=f"Question {i}?",
+            category="single",
+            reference_answer="Answer.",
+            evidence=[Evidence(doc_path="page1.mdx", anchor="sec1")],
+            must_mention=["ident"],
+            source="https://forum.example.com/t/123" if i <= MIN_REAL_SOURCES else "docs",
+            verified=False,
+        )
+        for i in range(1, 43)
+    ]
+    ok_pass, details_pass = check_sources(items_pass)
+    assert ok_pass
+    assert f"{MIN_REAL_SOURCES}/42 answerable items adapted from real user sources" in details_pass
+
+    # When real sources == MIN_REAL_SOURCES - 1: fails
+    items_fail = [
+        EvalItem(
+            id=f"q{i:03d}",
+            question=f"Question {i}?",
+            category="single",
+            reference_answer="Answer.",
+            evidence=[Evidence(doc_path="page1.mdx", anchor="sec1")],
+            must_mention=["ident"],
+            source="https://forum.example.com/t/123" if i < MIN_REAL_SOURCES else "docs",
+            verified=False,
+        )
+        for i in range(1, 43)
+    ]
+    ok_fail, details_fail = check_sources(items_fail)
+    assert not ok_fail
+    assert f"Only {MIN_REAL_SOURCES - 1}/42" in details_fail
+    assert f"minimum {MIN_REAL_SOURCES} required" in details_fail
+
+
+def test_absence_word_boundary_matching():
+    """Verify regex respects word boundaries ('pod' vs 'podcast', 'tripod')."""
+    pattern = build_term_regex("pod")
+    assert pattern.search("Deploying inside a pod container.") is not None
+    assert pattern.search("This is a pod.") is not None
+    assert pattern.search("Running (pod) test.") is not None
+    assert pattern.search("Listen to our podcast episode.") is None
+    assert pattern.search("Mounted on a tripod.") is None
+    assert pattern.search("Variable pod_count set.") is None
+
+
+def test_absence_case_insensitivity():
+    """Verify term matching is case-insensitive."""
+    pattern = build_term_regex("cuda")
+    assert pattern.search("Enable CUDA acceleration.") is not None
+    assert pattern.search("Cuda device mapping.") is not None
+    assert pattern.search("cuda support.") is not None
+
+
+def test_absence_multi_word_terms():
+    """Verify multi-word and hyphenated term matching."""
+    ws_pattern = build_term_regex("web socket")
+    assert ws_pattern.search("Use a web socket connection.") is not None
+    assert ws_pattern.search("Use a web    socket connection.") is not None
+    assert ws_pattern.search("Use a websocket connection.") is None
+
+    hs_pattern = build_term_regex("hot-swap")
+    assert hs_pattern.search("Perform a hot-swap operation.") is not None
+    assert hs_pattern.search("A hot-swappable module.") is None
+
+
+def test_absence_uncleared_hit_fails():
+    """Verify an unadjudicated term hit causes failure."""
+    chunk = {
+        "chunk_id": "c_gpu_01",
+        "doc_path": "gpu.mdx",
+        "anchor": "setup",
+        "url": "https://docs.example.com/gpu#setup",
+        "text": "Requires CUDA drivers installed on the host.",
+    }
+    items = [
+        EvalItem(
+            id="q043",
+            question="How to configure CUDA device pinning?",
+            category="unanswerable",
+            reference_answer=None,
+            evidence=[],
+            source="docs",
+        )
+    ]
+    terms_map = {"q043": ["cuda"]}
+    adjudications_map = {}
+
+    result = check_all_unanswerable_absence(items, [chunk], terms_map, adjudications_map)
+    assert not result.passed
+    assert len(result.errors) == 1
+    assert "c_gpu_01" in result.errors[0]
+
+
+def test_absence_adjudicated_hit_passes():
+    """Verify an adjudicated irrelevant hit passes absence verification."""
+    chunk = {
+        "chunk_id": "c_gpu_01",
+        "doc_path": "gpu.mdx",
+        "anchor": "setup",
+        "url": "https://docs.example.com/gpu#setup",
+        "text": "Requires CUDA drivers installed on the host.",
+    }
+    items = [
+        EvalItem(
+            id="q043",
+            question="How to configure CUDA device pinning?",
+            category="unanswerable",
+            reference_answer=None,
+            evidence=[],
+            source="docs",
+        )
+    ]
+    terms_map = {"q043": ["cuda"]}
+    adjudications_map = {
+        "q043": [
+            {
+                "term": "cuda",
+                "chunk_id": "c_gpu_01",
+                "verdict": "irrelevant",
+                "reason": "Reference is to host driver prerequisites not node configuration.",
+            }
+        ]
+    }
+
+    result = check_all_unanswerable_absence(items, [chunk], terms_map, adjudications_map)
+    assert result.passed
+    hits = result.item_hits["q043"]["cuda"]
+    assert len(hits) == 1
+    assert hits[0].cleared is True
+
+
+def test_absence_missing_terms_entry_fails():
+    """Verify missing absence_terms entry causes failure."""
+    items = [
+        EvalItem(
+            id="q043",
+            question="How to configure CUDA device pinning?",
+            category="unanswerable",
+            reference_answer=None,
+            evidence=[],
+            source="docs",
+        )
+    ]
+    result = check_all_unanswerable_absence(items, [], {}, {})
+    assert not result.passed
+    assert any("Missing absence terms" in err for err in result.errors)
+
+
+def test_must_mention_evidence_only(tiny_chunks):
+    """Verify must_mention must appear in evidence chunks, not merely anywhere in the corpus."""
+    # tiny_chunks[0] has 'SqliteSaver', tiny_chunks[1] has 'StateGraph'
+    items = make_valid_50_items()
+    # Change q001 evidence to page1 (which has SqliteSaver), but set must_mention to 'StateGraph'
+    # 'StateGraph' exists in the corpus (page2), but NOT in q001's evidence (page1).
+    items[0]["must_mention"] = ["StateGraph"]
+    raw_lines = [json.dumps(it) for it in items]
+
+    report = validate_eval_dataset(raw_lines, tiny_chunks, require_verified=False)
+    assert not report.passed
+    mm_check = next(c for c in report.checks if c.name == "Must-mention identifiers")
+    assert not mm_check.passed
+    assert "q001: 'StateGraph' not found in evidence chunks" in mm_check.details
+
+
+def test_4gram_overlap_case_insensitive():
+    """Verify 4-gram overlap catches mixed-case matches that match only after lowercasing."""
+    evidence_text = "To configure the memory saver, pass SqliteSaver to compile method."
+    # Mixed-case overlap with evidence: "TO CONFIGURE THE MEMORY" vs "To configure the memory"
+    question_mixed = "HOW TO CONFIGURE THE MEMORY SAVER IN PRODUCTION?"
+    overlaps = find_4gram_overlaps(question_mixed, [evidence_text])
+    assert "to configure the memory" in overlaps

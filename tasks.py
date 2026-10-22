@@ -11,10 +11,13 @@ Commands:
   ingest          Run documentation ingestion pipeline (added in M02)
   index           Build dense and sparse indexes (added in M04)
   eval            Run pipeline evaluation (added in M07)
-  validate-eval   Validate evaluation dataset format (added in M03)
-  dev             Run local development server (added in M10)
-  bundle-check    Check deployment bundle size (added in M01)
-  smoke           Run smoke tests against deployed service (added in M12)
+  validate-eval       Validate evaluation dataset format (added in M03)
+  verify-sources      Verify source quotes against live page snapshots (added in M03)
+  check-unanswerable  Check keyword absence for unanswerable items
+  audit-eval          Audit evaluation set against evidence chunks
+  dev                 Run local development server (added in M10)
+  bundle-check        Check deployment bundle size (added in M01)
+  smoke               Run smoke tests against deployed service (added in M12)
 """
 
 import argparse
@@ -233,6 +236,27 @@ def cmd_validate_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
     return run_command(cmd)
 
 
+def cmd_check_unanswerable(args: argparse.Namespace, extra_args: list[str]) -> int:
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "scripts" / "check_unanswerable.py"
+    cmd = [str(py), str(script)] + extra_args
+    return run_command(cmd)
+
+
+def cmd_audit_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "scripts" / "audit_eval.py"
+    cmd = [str(py), str(script)] + extra_args
+    return run_command(cmd)
+
+
+def cmd_verify_sources(args: argparse.Namespace, extra_args: list[str]) -> int:
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "scripts" / "verify_source_quotes.py"
+    cmd = [str(py), str(script)] + extra_args
+    return run_command(cmd)
+
+
 def cmd_dev(args: argparse.Namespace, extra_args: list[str]) -> int:
     py = ensure_venv_exists()
     cmd = [
@@ -295,6 +319,10 @@ def main() -> int:
         "--require-verified", action="store_true", help="Require verified flag"
     )
 
+    subparsers.add_parser("check-unanswerable", help="Check unanswerable keywords absence")
+    subparsers.add_parser("audit-eval", help="Audit evaluation dataset against chunks")
+    subparsers.add_parser("verify-sources", help="Verify source quotes against page snapshots")
+
     subparsers.add_parser("dev", help="Run dev server")
     subparsers.add_parser("bundle-check", help="Check bundle size")
 
@@ -319,6 +347,9 @@ def main() -> int:
         "index": cmd_index,
         "eval": cmd_eval,
         "validate-eval": cmd_validate_eval,
+        "verify-sources": cmd_verify_sources,
+        "check-unanswerable": cmd_check_unanswerable,
+        "audit-eval": cmd_audit_eval,
         "dev": cmd_dev,
         "bundle-check": cmd_bundle_check,
         "smoke": cmd_smoke,

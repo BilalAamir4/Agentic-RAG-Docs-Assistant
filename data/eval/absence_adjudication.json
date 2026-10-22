@@ -1,0 +1,110 @@
+{
+  "q043": [
+    {
+      "term": "across retries",
+      "chunk_id": "6d61f021e1b376c4",
+      "verdict": "irrelevant",
+      "reason": "Describes runtime.execution_info.node_first_attempt_time being constant across retries; does not cap cumulative retry wall-clock time."
+    },
+    {
+      "term": "across retries",
+      "chunk_id": "1b9a02395c8dcdd2",
+      "verdict": "irrelevant",
+      "reason": "Describes runtime.execution_info.node_first_attempt_time staying the same across retries; does not cap cumulative retry wall-clock time."
+    }
+  ],
+  "q046": [
+    {
+      "term": "retention",
+      "chunk_id": "16da86313b94feae",
+      "verdict": "irrelevant",
+      "reason": "Discusses pruning checkpoints and cron retention for PostgresSaver; no retention argument for InMemorySaver exists."
+    },
+    {
+      "term": "ttl",
+      "chunk_id": "22ae4759d4f0aa55",
+      "verdict": "irrelevant",
+      "reason": "Describes CachePolicy(ttl=...) for node caching, unrelated to InMemorySaver checkpoint retention."
+    },
+    {
+      "term": "ttl",
+      "chunk_id": "1eabea8372a39087",
+      "verdict": "irrelevant",
+      "reason": "Describes CachePolicy(ttl=120) task caching in Functional API, unrelated to InMemorySaver."
+    },
+    {
+      "term": "ttl",
+      "chunk_id": "485938d00611014a",
+      "verdict": "irrelevant",
+      "reason": "Describes CachePolicy(ttl=120) node caching in StateGraph, unrelated to InMemorySaver."
+    }
+  ],
+  "q050": [
+    {
+      "term": "billing",
+      "chunk_id": "8910a2ee2e6eceae",
+      "verdict": "irrelevant",
+      "reason": "Example customer email topic ('billing issue') in email triage agent tutorial."
+    },
+    {
+      "term": "billing",
+      "chunk_id": "9f8b395e2fca69e3",
+      "verdict": "irrelevant",
+      "reason": "Intent classification literal ('billing') in email triage tutorial."
+    },
+    {
+      "term": "billing",
+      "chunk_id": "b16ab7e8fc45f76f",
+      "verdict": "irrelevant",
+      "reason": "Routing condition matching email classification intent == 'billing'."
+    },
+    {
+      "term": "billing",
+      "chunk_id": "f9f8d48e79be1134",
+      "verdict": "irrelevant",
+      "reason": "Tutorial test scenario running email agent with a billing issue."
+    },
+    {
+      "term": "billing",
+      "chunk_id": "88b3b001108649f3",
+      "verdict": "irrelevant",
+      "reason": "Illustrative customer support subagent role ('billing expert')."
+    },
+    {
+      "term": "cost",
+      "chunk_id": "f0cfdf3abbe906d0",
+      "verdict": "irrelevant",
+      "reason": "Idiomatic phrase: 'at the cost of some performance overhead' in durability modes."
+    },
+    {
+      "term": "cost",
+      "chunk_id": "b4199820f7d508c6",
+      "verdict": "irrelevant",
+      "reason": "Bullet point listing custom frontend stream channel use cases, not execution_info."
+    },
+    {
+      "term": "cost",
+      "chunk_id": "24e76416b458ca31",
+      "verdict": "irrelevant",
+      "reason": "Idiomatic phrase: 'at the cost of larger checkpoints' in DeltaChannel docs."
+    },
+    {
+      "term": "cost",
+      "chunk_id": "485938d00611014a",
+      "verdict": "irrelevant",
+      "reason": "Idiomatic phrase: 'expensive (either in terms of time or cost)' in node caching."
+    },
+    {
+      "term": "token usage",
+      "chunk_id": "e2bc10ee4e354945",
+      "verdict": "irrelevant",
+      "reason": "Describes streaming event field for message-finish events, not execution_info."
+    },
+    {
+      "term": "token usage",
+      "chunk_id": "b4199820f7d508c6",
+      "verdict": "irrelevant",
+      "reason": "Lists token usage among hypothetical live metrics for custom frontend stream channels."
+    }
+  ]
+}

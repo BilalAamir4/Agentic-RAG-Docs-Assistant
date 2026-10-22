@@ -13,3 +13,6 @@ cache/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Third-party page snapshots (local only; re-fetch to run verify-sources)
+data/eval/source_snapshots/

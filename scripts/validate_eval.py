@@ -14,12 +14,16 @@ from ragdocs.io_utils import read_jsonl
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_EVAL_PATH = REPO_ROOT / "data" / "eval" / "eval_set.jsonl"
 DEFAULT_CHUNKS_PATH = REPO_ROOT / "data" / "processed" / "chunks.jsonl"
+DEFAULT_QUOTES_PATH = REPO_ROOT / "data" / "eval" / "source_quotes.json"
+DEFAULT_SNAPSHOTS_DIR = REPO_ROOT / "data" / "eval" / "source_snapshots"
 
 
 def run_validation(
     eval_path: Path,
     chunks_path: Path,
     require_verified: bool = False,
+    quotes_path: Path | None = None,
+    snapshots_dir: Path | None = None,
 ) -> int:
     """Read dataset and chunks, run validation, and print report."""
     if not eval_path.exists():
@@ -40,6 +44,8 @@ def run_validation(
         raw_lines=raw_lines,
         chunks=chunks,
         require_verified=require_verified,
+        quotes_path=quotes_path,
+        snapshots_dir=snapshots_dir,
     )
 
     print(report.format_summary())
@@ -64,12 +70,24 @@ def main() -> int:
         action="store_true",
         help="Require all items to have verified=True",
     )
+    parser.add_argument(
+        "--quotes-path",
+        default=str(DEFAULT_QUOTES_PATH),
+        help="Path to source_quotes.json",
+    )
+    parser.add_argument(
+        "--snapshots-dir",
+        default=str(DEFAULT_SNAPSHOTS_DIR),
+        help="Path to source_snapshots directory",
+    )
 
     args = parser.parse_args()
     return run_validation(
         eval_path=Path(args.eval_path),
         chunks_path=Path(args.chunks_path),
         require_verified=args.require_verified,
+        quotes_path=Path(args.quotes_path),
+        snapshots_dir=Path(args.snapshots_dir),
     )
 
 

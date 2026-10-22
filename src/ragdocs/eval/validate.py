@@ -3,9 +3,22 @@
 import json
 import string
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from ragdocs.eval.absence import (
+    check_all_unanswerable_absence,
+    load_absence_adjudications,
+    load_absence_terms,
+)
+from ragdocs.eval.config import MIN_REAL_SOURCES
 from ragdocs.schemas import Chunk, EvalItem
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+DEFAULT_TERMS_PATH = REPO_ROOT / "data" / "eval" / "absence_terms.json"
+DEFAULT_ADJUDICATIONS_PATH = REPO_ROOT / "data" / "eval" / "absence_adjudication.json"
+DEFAULT_QUOTES_PATH = REPO_ROOT / "data" / "eval" / "source_quotes.json"
+DEFAULT_SNAPSHOTS_DIR = REPO_ROOT / "data" / "eval" / "source_snapshots"
 
 
 @dataclass
@@ -128,10 +141,7 @@ def check_ids(items: list[EvalItem]) -> tuple[bool, str]:
 
 
 def check_category_counts(items: list[EvalItem]) -> tuple[bool, str]:
-    """Check that categories match exact counts and ordering."""
-    expected_order = ["single"] * 28 + ["multi"] * 8 + ["version"] * 6 + ["unanswerable"] * 8
-    actual_order = [item.category for item in items]
-
+    """Check that categories match exact distribution counts."""
     counts = {
         "single": sum(1 for it in items if it.category == "single"),
         "multi": sum(1 for it in items if it.category == "multi"),
@@ -143,8 +153,9 @@ def check_category_counts(items: list[EvalItem]) -> tuple[bool, str]:
         f"version={counts['version']}/6, unanswerable={counts['unanswerable']}/8"
     )
 
-    if actual_order != expected_order:
-        return False, f"Category count/order mismatch ({count_summary})"
+    expected = {"single": 28, "multi": 8, "version": 6, "unanswerable": 8}
+    if counts != expected:
+        return False, f"Category count mismatch ({count_summary})"
     return True, f"Category counts exact: {count_summary}"
 
 
@@ -218,23 +229,25 @@ def check_page_spread(items: list[EvalItem]) -> tuple[bool, str]:
     return True, f"Page spread rules satisfied ({details})"
 
 
-def check_sources(items: list[EvalItem]) -> tuple[bool, str]:
-    """Check that at least 20 answerable items are adapted from real user sources."""
+def check_sources(items: list[EvalItem], min_sources: int = MIN_REAL_SOURCES) -> tuple[bool, str]:
+    """Check that at least min_sources answerable items are adapted from real user sources."""
     answerable = [it for it in items if it.category != "unanswerable"]
     user_sourced = [it for it in answerable if it.source != "docs"]
 
     count = len(user_sourced)
-    if count < 20:
-        return False, f"Only {count}/42 answerable items from user sources (minimum 20 required)"
+    if count < min_sources:
+        return (
+            False,
+            f"Only {count}/42 answerable items from user sources (minimum {min_sources} required)",
+        )
     return True, f"{count}/42 answerable items adapted from real user sources"
 
 
 def check_must_mention(
     items: list[EvalItem],
     evidence_map: dict[tuple[str, str], list[str]],
-    all_texts: set[str],
 ) -> tuple[bool, str]:
-    """Check that must_mention identifiers appear verbatim in evidence or corpus."""
+    """Check that must_mention identifiers appear verbatim in evidence chunks."""
     missing: list[str] = []
 
     for item in items:
@@ -247,21 +260,40 @@ def check_must_mention(
             missing.append(f"{item.id}: must_mention count {len(item.must_mention)} not in [1, 4]")
             continue
 
-        if item.category == "version":
-            for ident in item.must_mention:
-                if not any(ident in text for text in all_texts):
-                    missing.append(f"{item.id}: '{ident}' not found in corpus")
-        else:
-            evidence_texts: list[str] = []
-            for ev in item.evidence:
-                evidence_texts.extend(evidence_map.get((ev.doc_path, ev.anchor), []))
-            for ident in item.must_mention:
-                if not any(ident in text for text in evidence_texts):
-                    missing.append(f"{item.id}: '{ident}' not found in evidence chunks")
+        evidence_texts: list[str] = []
+        for ev in item.evidence:
+            evidence_texts.extend(evidence_map.get((ev.doc_path, ev.anchor), []))
+
+        for ident in item.must_mention:
+            if not any(ident in text for text in evidence_texts):
+                missing.append(f"{item.id}: '{ident}' not found in evidence chunks")
 
     if missing:
         return False, f"must_mention verification failed: {', '.join(missing[:5])}"
-    return True, "All must_mention identifiers verified verbatim in evidence/corpus"
+    return True, "All must_mention identifiers verified verbatim in evidence chunks"
+
+
+def check_unanswerable_absence(
+    items: list[EvalItem],
+    chunks: list[Chunk] | list[dict[str, Any]],
+    absence_terms_map: dict[str, list[str]] | None = None,
+    adjudications_map: dict[str, list[dict[str, Any]]] | None = None,
+) -> tuple[bool, str]:
+    """Check that unanswerable items have absence terms defined and zero uncleared hits."""
+    if absence_terms_map is None:
+        absence_terms_map = load_absence_terms(DEFAULT_TERMS_PATH)
+    if adjudications_map is None:
+        adjudications_map = load_absence_adjudications(DEFAULT_ADJUDICATIONS_PATH)
+
+    res = check_all_unanswerable_absence(
+        items=items,
+        chunks=chunks,
+        absence_terms_map=absence_terms_map,
+        adjudications_map=adjudications_map,
+    )
+    if res.passed:
+        return True, "All unanswerable items have zero uncleared keyword hits"
+    return False, f"Absence check failed ({len(res.errors)} error(s)): {res.errors[0]}"
 
 
 def check_verification_status(items: list[EvalItem], require_verified: bool) -> tuple[bool, str]:
@@ -275,15 +307,66 @@ def check_verification_status(items: list[EvalItem], require_verified: bool) -> 
     return True, status_str
 
 
+def check_source_quotes_registered(
+    items: list[EvalItem],
+    quotes_path: Path | None = None,
+    snapshots_dir: Path | None = None,
+) -> tuple[bool, str]:
+    """Check that non-'docs' sources have source_quotes.json entries and snapshots."""
+    if quotes_path is None:
+        quotes_path = DEFAULT_QUOTES_PATH
+    if snapshots_dir is None:
+        snapshots_dir = DEFAULT_SNAPSHOTS_DIR
+
+    user_sourced = [it for it in items if it.source != "docs"]
+    if not user_sourced:
+        return True, "No external user sources to verify"
+
+    if not quotes_path.exists():
+        return False, f"source_quotes.json not found at {quotes_path}"
+
+    try:
+        with open(quotes_path, encoding="utf-8") as f:
+            quotes_data = json.load(f)
+    except Exception as exc:
+        return False, f"Failed to parse source_quotes.json: {exc}"
+
+    missing_quotes: list[str] = []
+    missing_snapshots: list[str] = []
+
+    for it in user_sourced:
+        if it.id not in quotes_data:
+            missing_quotes.append(it.id)
+        snap_file = snapshots_dir / f"{it.id}.txt"
+        if not snap_file.exists():
+            missing_snapshots.append(it.id)
+
+    errors: list[str] = []
+    if missing_quotes:
+        errors.append(f"missing quotes in source_quotes.json: {', '.join(missing_quotes)}")
+    if missing_snapshots:
+        errors.append(f"missing snapshot files: {', '.join(missing_snapshots)}")
+
+    if errors:
+        return False, f"Source quotes verification failed: {'; '.join(errors)}"
+
+    return True, f"All {len(user_sourced)} external source(s) have registered quotes and snapshots"
+
+
 def validate_eval_dataset(
     raw_lines: list[str],
     chunks: list[Chunk] | list[dict[str, Any]],
     require_verified: bool = False,
+    absence_terms_map: dict[str, list[str]] | None = None,
+    adjudications_map: dict[str, list[dict[str, Any]]] | None = None,
+    quotes_path: Path | None = None,
+    snapshots_dir: Path | None = None,
+    min_real_sources: int = MIN_REAL_SOURCES,
 ) -> ValidationReport:
     """Run all validation checks against evaluation dataset."""
     checks: list[CheckResult] = []
 
-    evidence_map, all_texts = load_chunks_lookup(chunks)
+    evidence_map, _ = load_chunks_lookup(chunks)
 
     # Check 1: Parse
     parse_ok, items, parse_details = check_parsing(raw_lines)
@@ -312,16 +395,33 @@ def validate_eval_dataset(
     checks.append(CheckResult("Page spread", spread_ok, spread_details))
 
     # Check 7: Sourcing
-    src_ok, src_details = check_sources(items)
+    src_ok, src_details = check_sources(items, min_sources=min_real_sources)
     checks.append(CheckResult("Real user question sourcing", src_ok, src_details))
 
     # Check 8: must_mention
-    mm_ok, mm_details = check_must_mention(items, evidence_map, all_texts)
+    mm_ok, mm_details = check_must_mention(items, evidence_map)
     checks.append(CheckResult("Must-mention identifiers", mm_ok, mm_details))
 
-    # Check 9: Verified count
+    # Check 9: Verification status
     ver_ok, ver_details = check_verification_status(items, require_verified)
     checks.append(CheckResult("Verification status", ver_ok, ver_details))
+
+    # Check 10: Unanswerable absence
+    abs_ok, abs_details = check_unanswerable_absence(
+        items=items,
+        chunks=chunks,
+        absence_terms_map=absence_terms_map,
+        adjudications_map=adjudications_map,
+    )
+    checks.append(CheckResult("Unanswerable absence", abs_ok, abs_details))
+
+    # Check 11: Source quotes verified
+    sq_ok, sq_details = check_source_quotes_registered(
+        items=items,
+        quotes_path=quotes_path,
+        snapshots_dir=snapshots_dir,
+    )
+    checks.append(CheckResult("Source quotes verified", sq_ok, sq_details))
 
     passed = all(c.passed for c in checks)
     return ValidationReport(passed=passed, checks=checks)

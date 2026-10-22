@@ -1,0 +1,18 @@
+{
+  "q043": [
+    "max_elapsed",
+    "deadline",
+    "total retry",
+    "retry budget",
+    "max_delay",
+    "across all attempts",
+    "across retries"
+  ],
+  "q044": ["neo4j"],
+  "q045": ["websocket", "web socket", "socket"],
+  "q046": ["max_checkpoints", "retention", "ttl"],
+  "q047": ["hot swap", "hot-swap", "replace node", "reload"],
+  "q048": ["graphql"],
+  "q049": ["kubernetes", "k8s", "pod", "pods", "executor"],
+  "q050": ["billing", "cost", "token usage", "dollar"]
+}

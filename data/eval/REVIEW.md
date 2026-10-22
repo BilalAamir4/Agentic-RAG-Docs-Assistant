@@ -9,12 +9,12 @@ Instructions for reviewer:
 
 ---
 
-## [q001] When my execution halts because of GRAPH_RECURSION_LIMIT, how can I raise the maximum allowed step count?
+## [q001] My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/78337975/setting-recursion-limit-in-langgraphs-stategraph-with-pregel-engine
+- **Source:** https://forum.langchain.com/t/increasing-recursion-limit-on-deployment/1887
 - **Must mention:** `recursion_limit`
-- **Reference Answer:** Pass recursion_limit inside the configuration dictionary when invoking or streaming the graph.
+- **Reference Answer:** Pass a higher recursion_limit in the config object when invoking the graph, e.g. graph.invoke(inputs, {"recursion_limit": 1000}).
 
 ### Evidence Chunks
 
@@ -36,12 +36,12 @@ Reviewer note:
 
 ---
 
-## [q002] What causes a compiled StateGraph to abruptly halt with a graph recursion limit error?
+## [q002] What makes a compiled StateGraph stop with a recursion-limit error even though nothing seems broken?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/79764954/how-to-solve-graph-recursion-limit-error-in-langgraph-and-streamlit
+- **Source:** docs
 - **Must mention:** `StateGraph`
-- **Reference Answer:** Execution halts with a recursion limit error when a StateGraph completes the maximum allowed steps without reaching a stop condition.
+- **Reference Answer:** The graph reached the maximum number of steps before hitting a stop condition. This is often an infinite loop from a cycle (e.g. edges a->b and b->a), but complex graphs can also hit the default limit naturally.
 
 ### Evidence Chunks
 
@@ -79,12 +79,12 @@ Reviewer note:
 
 ---
 
-## [q003] Why does calling invoke with a thread ID fail with a missing checkpointer error?
+## [q003] What do I change in compile() to fix the MISSING_CHECKPOINTER error?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9267
+- **Source:** docs
 - **Must mention:** `checkpointer`
-- **Reference Answer:** State persistence and thread IDs require compiling the graph with a checkpointer instance such as MemorySaver.
+- **Reference Answer:** Initialize a checkpointer (e.g. InMemorySaver) and pass it to compile() of the StateGraph, or to @entrypoint for the Functional API.
 
 ### Evidence Chunks
 
@@ -131,9 +131,9 @@ Reviewer note:
 ## [q004] How do I define a state key so new items append to a list instead of replacing it?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/78503492/why-is-my-state-not-being-passed-correctly-in-my-langgraph-workflow
-- **Must mention:** `Annotated`
-- **Reference Answer:** Wrap the list type in Annotated and specify a reducer function such as operator.add or add_messages.
+- **Source:** docs
+- **Must mention:** `Annotated`, `operator.add`
+- **Reference Answer:** Annotate the key with a reducer using Annotated, e.g. Annotated[list, operator.add]; without a reducer, updates overwrite the value.
 
 ### Evidence Chunks
 
@@ -213,7 +213,7 @@ Reviewer note:
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `START`
-- **Reference Answer:** Connect edges starting from the virtual START node to define where graph execution begins.
+- **Reference Answer:** The virtual START node: add an edge from START to the first node (graph.add_edge(START, "node_a")).
 
 ### Evidence Chunks
 
@@ -252,9 +252,9 @@ Reviewer note:
 ## [q006] What method lets an operator overwrite state attributes on an existing thread without running a node?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/79815843/making-a-langgraph-agent-change-its-internal-state
+- **Source:** docs
 - **Must mention:** `update_state`
-- **Reference Answer:** Call graph.update_state with the target configuration dictionary and state values.
+- **Reference Answer:** Call update_state(config, values). It creates a new checkpoint (the original is not modified) and passes values through reducers like a node update.
 
 ### Evidence Chunks
 
@@ -272,12 +272,12 @@ Reviewer note:
 
 ---
 
-## [q007] How do checkpointers differ from stores in terms of persistence scope?
+## [q007] I'm confused about how checkpointing differs from long-term memory in LangGraph; how do their scopes differ?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/78426461/nosql-database-mongodb-checkpointer-classes-in-langgraph
+- **Source:** https://forum.langchain.com/t/separate-long-term-memory-and-checkpointing/1668
 - **Must mention:** `Checkpointer`, `Store`
-- **Reference Answer:** A checkpointer saves state snapshots scoped to a single thread, whereas a store persists application key-value data across threads.
+- **Reference Answer:** A checkpointer persists graph state snapshots scoped to a single thread (short-term memory); a store persists application-defined key-value data across threads (long-term memory).
 
 ### Evidence Chunks
 
@@ -303,9 +303,9 @@ Reviewer note:
 ## [q008] How can I retrieve the complete sequence of past checkpoints recorded for a specific conversation?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9271
+- **Source:** docs
 - **Must mention:** `get_state_history`
-- **Reference Answer:** Use graph.get_state_history passing the thread configuration.
+- **Reference Answer:** Call graph.get_state_history(config) with the thread's config; it returns StateSnapshot objects ordered chronologically with the most recent first.
 
 ### Evidence Chunks
 
@@ -404,10 +404,11 @@ Reviewer note:
 
 ## [q009] Which channel mechanism avoids storing redundant duplicate states by persisting only incremental changes?
 
-- **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9270
+- **Category:** `version`
+- **Source:** docs
 - **Must mention:** `DeltaChannel`
-- **Reference Answer:** DeltaChannel writes only state deltas rather than snapshotting full values at each superstep.
+- **Reference Answer:** DeltaChannel stores only incremental deltas instead of the full accumulated value, reducing checkpoint size for append-heavy channels. It requires langgraph>=1.2 and is in beta.
+- **Notes:** Before langgraph 1.2, checkpoints wrote the full value of every state channel at each super-step; DeltaChannel is documented as requiring langgraph>=1.2 (beta). Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0 (release notes include DeltaChannel beta marking, #7732).
 
 ### Evidence Chunks
 
@@ -428,12 +429,12 @@ Reviewer note:
 
 ---
 
-## [q010] Where can a node read the current attempt counter and thread ID during retry cycles?
+## [q010] How can a node see its current retry attempt number and the thread ID?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/79755340/how-to-retrieve-the-current-conversation-id-inside-a-tool-function-in-langgraph
-- **Must mention:** `execution_info`, `Runtime`
-- **Reference Answer:** Declare a runtime parameter typed as Runtime to access runtime.execution_info.node_attempt.
+- **Source:** docs
+- **Must mention:** `execution_info`, `node_attempt`
+- **Reference Answer:** Declare a runtime: Runtime parameter on the node and read runtime.execution_info, e.g. node_attempt (1-indexed) and thread_id.
 
 ### Evidence Chunks
 
@@ -482,12 +483,12 @@ Reviewer note:
 
 ---
 
-## [q011] How can an agent pause inside a tool invocation to request clarification from an end user?
+## [q011] How do I make a tool the agent calls pause for human approval instead of doing it in a graph node?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/79582204/how-to-resume-a-langgraph-stream-after-a-custom-human-assistance-tool-interrupt
+- **Source:** https://forum.langchain.com/t/auto-resuming-challenges-in-langgraph/1657
 - **Must mention:** `interrupt`
-- **Reference Answer:** Invoke the interrupt function directly within the tool body.
+- **Reference Answer:** Call interrupt() inside the tool function; resume execution with Command(resume=...), whose value becomes the return value of interrupt().
 
 ### Evidence Chunks
 
@@ -641,12 +642,12 @@ Reviewer note:
 
 ---
 
-## [q012] What prebuilt state schema comes standard with a messages key configured with message reducers?
+## [q012] Which built-in state class gives me a messages list out of the box?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/79896070/agentic-rag-tool-calling-issue-groq-langchain-agent-fails-with-tool-use-faile
+- **Source:** docs
 - **Must mention:** `MessagesState`
-- **Reference Answer:** MessagesState provides a predefined state schema containing an annotated list of chat messages.
+- **Reference Answer:** MessagesState, which stores a messages list of chat messages.
 
 ### Evidence Chunks
 
@@ -708,12 +709,12 @@ Reviewer note:
 
 ---
 
-## [q013] How do you define an asynchronous workflow function when building with the Functional API?
+## [q013] How do I turn a plain Python function into a workflow that can be checkpointed and interrupted?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9280
+- **Source:** docs
 - **Must mention:** `entrypoint`
-- **Reference Answer:** Decorate your top-level workflow function with @entrypoint.
+- **Reference Answer:** Decorate the function with @entrypoint (optionally with a checkpointer); it manages execution flow, long-running tasks and interrupts.
 
 ### Evidence Chunks
 
@@ -778,9 +779,9 @@ Reviewer note:
 ## [q014] Which decorator wraps individual discrete steps executed within an entrypoint workflow?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9284
-- **Must mention:** `task`
-- **Reference Answer:** Use @task to declare isolated functional tasks.
+- **Source:** docs
+- **Must mention:** `@task`
+- **Reference Answer:** @task; call the task and use .result() to get its value inside the entrypoint.
 
 ### Evidence Chunks
 
@@ -845,9 +846,9 @@ Reviewer note:
 ## [q015] How can I branch history starting from an earlier saved snapshot to evaluate an alternative flow?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/7800
-- **Must mention:** `fork`
-- **Reference Answer:** Supply checkpoint_id in the configurable dictionary alongside thread_id when calling update_state.
+- **Source:** docs
+- **Must mention:** `fork`, `update_state`
+- **Reference Answer:** Fork: find a past checkpoint (via get_state_history), call update_state on that checkpoint's config with modified values to create a new branch, then invoke(None, fork_config) to continue. The original history stays intact.
 
 ### Evidence Chunks
 
@@ -890,9 +891,9 @@ Reviewer note:
 ## [q016] How can I retrieve stored memories by semantic similarity rather than exact key match?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/8786
-- **Must mention:** `search`
-- **Reference Answer:** Call store.search specifying the namespace and query string.
+- **Source:** https://forum.langchain.com/t/langgraph-cloud-using-the-built-in-postgresql-store-for-long-term-memory-ltm-and-vector-similarity-search/245
+- **Must mention:** `store.search`
+- **Reference Answer:** Configure the store with an embedding index, then call store.search(namespace, query="...", limit=N) with a natural-language query.
 
 ### Evidence Chunks
 
@@ -955,8 +956,8 @@ Reviewer note:
 
 - **Category:** `single`
 - **Source:** docs
-- **Must mention:** `put`
-- **Reference Answer:** Use store.put with the namespace tuple, item key, and value dictionary.
+- **Must mention:** `store.put`
+- **Reference Answer:** store.put(namespace, key, value), where namespace is a tuple, key a unique memory id and value a dictionary.
 
 ### Evidence Chunks
 
@@ -1024,12 +1025,12 @@ Reviewer note:
 
 ---
 
-## [q018] What is the recommended streaming mode to stream tokens emitted by LLM calls in real time?
+## [q018] How can I stream model output as individual tokens from my graph?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/78354163/how-may-i-yield-outputs-llm-tokens-from-langgraph-nodes
+- **Source:** https://forum.langchain.com/t/how-to-use-human-in-the-loop-with-stream-mode-messages/1627
 - **Must mention:** `messages`
-- **Reference Answer:** Set stream_mode='messages' when invoking graph.stream.
+- **Reference Answer:** Pass the messages stream mode to stream or astream to receive 2-tuples of (LLM token, metadata) in real time.
 
 ### Evidence Chunks
 
@@ -1058,9 +1059,9 @@ Reviewer note:
 ## [q019] How do you configure breakpoints to pause execution prior to running specified nodes?
 
 - **Category:** `single`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9277
+- **Source:** docs
 - **Must mention:** `interrupt_before`
-- **Reference Answer:** Pass interrupt_before containing a list of node names to compile or invoke.
+- **Reference Answer:** Set interrupt_before (a list of node names) when compiling the graph, or pass it at invoke time; a checkpointer is required, and resume with invoke(None, config). interrupt_after pauses after a node.
 
 ### Evidence Chunks
 
@@ -1145,7 +1146,7 @@ Reviewer note:
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `langgraph dev`
-- **Reference Answer:** Run langgraph dev in your application folder to start the local API server.
+- **Reference Answer:** Run langgraph dev to start the LangGraph API server locally (in-memory mode, for development and testing).
 
 ### Evidence Chunks
 
@@ -1187,12 +1188,12 @@ Reviewer note:
 
 ---
 
-## [q021] Which configuration file specifies graphs and dependencies for LangGraph deployment?
+## [q021] Which file configures a LangGraph app for deployment?
 
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `langgraph.json`
-- **Reference Answer:** Configure your application structure and graphs inside langgraph.json.
+- **Reference Answer:** langgraph.json. A LangGraph application consists of graphs, langgraph.json, a dependencies file and an optional .env file.
 
 ### Evidence Chunks
 
@@ -1213,12 +1214,12 @@ Reviewer note:
 
 ---
 
-## [q022] Which built-in node executes tool calls and injects their responses into state?
+## [q022] Which prebuilt node runs the tools an LLM requested?
 
 - **Category:** `single`
-- **Source:** https://stackoverflow.com/questions/79325692/attributeerror-openai-object-has-no-attribute-bind-tools-while-creating-a-r
+- **Source:** docs
 - **Must mention:** `ToolNode`
-- **Reference Answer:** ToolNode is a prebuilt LangGraph node that manages tool invocation and error handling.
+- **Reference Answer:** ToolNode: a prebuilt node that executes tools, handling parallel tool execution, error handling and state injection.
 
 ### Evidence Chunks
 
@@ -1285,7 +1286,7 @@ Reviewer note:
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `NotRequired`
-- **Reference Answer:** Declare newly added state keys as NotRequired so historical thread checkpoints validate without error.
+- **Reference Answer:** Add new state fields as NotRequired (or Optional with a None default) so old checkpoints still validate.
 
 ### Evidence Chunks
 
@@ -1318,9 +1319,9 @@ Reviewer note:
 ## [q024] Why does parallel branching fail when two nodes write to the identical state attribute?
 
 - **Category:** `single`
-- **Source:** docs
+- **Source:** https://github.com/langchain-ai/langgraph/issues/2336
 - **Must mention:** `operator.add`
-- **Reference Answer:** Concurrent updates without an associative reducer cause uncertainty in state resolution, requiring Annotated with operator.add.
+- **Reference Answer:** When several nodes in a fan-out return a value for the same key in one step and the key has no reducer, the graph raises a concurrent update error because it is uncertain how to merge them. Define the key with a reducer, e.g. Annotated[list, operator.add].
 
 ### Evidence Chunks
 
@@ -1393,7 +1394,7 @@ Reviewer note:
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `InvalidUpdateError`
-- **Reference Answer:** LangGraph raises InvalidUpdateError because nodes must return dictionaries representing updates.
+- **Reference Answer:** InvalidUpdateError ("Expected dict, got [...]"); nodes must return a dict with keys defined in the state.
 
 ### Evidence Chunks
 
@@ -1449,9 +1450,9 @@ Reviewer note:
 ## [q026] How can I invoke and test a specific isolated node from a compiled graph?
 
 - **Category:** `single`
-- **Source:** docs
+- **Source:** https://forum.langchain.com/t/best-practices-for-testing-langgraph-nodes-separately/1396
 - **Must mention:** `nodes`
-- **Reference Answer:** Access the target node through graph.nodes using the node key and call invoke directly with test input.
+- **Reference Answer:** Access it through compiled_graph.nodes (e.g. compiled_graph.nodes["node1"]) and call invoke() with test input; this bypasses any checkpointer.
 
 ### Evidence Chunks
 
@@ -1498,12 +1499,12 @@ Reviewer note:
 
 ---
 
-## [q027] Which hook in the LangGraph Studio UI enables visual step-by-step state inspection?
+## [q027] Which tool lets me visually inspect each step of my agent locally?
 
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `Studio`
-- **Reference Answer:** Open LangGraph Studio to view interactive state inspection and execution traces.
+- **Reference Answer:** LangSmith Studio, a free visual interface that connects to a locally running agent and shows prompts, tool calls and results, and intermediate states.
 
 ### Evidence Chunks
 
@@ -1523,12 +1524,12 @@ Reviewer note:
 
 ---
 
-## [q028] Which channel architecture does Pregel assign out of the box when no reducer is configured?
+## [q028] In Pregel, which channel is used by default, and what happens to earlier values?
 
 - **Category:** `single`
 - **Source:** docs
 - **Must mention:** `LastValue`
-- **Reference Answer:** LastValue is the default channel type, storing the most recent value and overwriting earlier entries.
+- **Reference Answer:** LastValue is the default channel type; it stores the last value written and overwrites any previous value.
 
 ### Evidence Chunks
 
@@ -1562,9 +1563,9 @@ Reviewer note:
 ## [q029] How do I set up a graph with SQLite persistence and resume an interrupted thread?
 
 - **Category:** `multi`
-- **Source:** https://stackoverflow.com/questions/79471648/when-using-interrupt-followed-by-new-command-resume-get-an-undefin
+- **Source:** docs
 - **Must mention:** `SqliteSaver`, `Command`
-- **Reference Answer:** Compile the graph with SqliteSaver and resume the execution using Command with the saved thread_id.
+- **Reference Answer:** Install langgraph-checkpoint-sqlite and compile with a SqliteSaver checkpointer, run with a config carrying a thread ID, and resume by calling stream_events(Command(resume=...), version="v3") again.
 
 ### Evidence Chunks
 
@@ -1617,35 +1618,65 @@ Reviewer note:
 
 ---
 
-## [q030] How can I catch exceptions in a node and retry automatically before routing to compensation?
+## [q030] How can I retry a failing node automatically and then route to a recovery branch if it still fails?
 
 - **Category:** `multi`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/6170
+- **Source:** https://forum.langchain.com/t/the-best-way-in-langgraph-to-control-flow-after-retries-exhausted/1574
 - **Must mention:** `RetryPolicy`, `Command`
-- **Reference Answer:** Configure RetryPolicy on add_node to attempt retries, then attach an error_handler returning Command.
+- **Reference Answer:** Add the node with retry_policy=RetryPolicy(...) and error_handler=handler; once retries are exhausted the handler runs and can return Command(update=..., goto=...) to route to a compensation node. error_handler requires langgraph>=1.2.
+- **Notes:** Replaced the default-behavior evidence chunk, which does not support the answer, with error-handling.
 
 ### Evidence Chunks
 
-#### Chunk `2ef7d2072b3416ec` (https://docs.langchain.com/oss/python/langgraph/fault-tolerance#default-behavior)
-**Doc Path:** `fault-tolerance.mdx` | **Anchor:** `default-behavior`
+#### Chunk `21cf6cebc6be0c62` (https://docs.langchain.com/oss/python/langgraph/fault-tolerance#error-handling)
+**Doc Path:** `fault-tolerance.mdx` | **Anchor:** `error-handling`
 
 ```text
-By default, `retry_on` uses `default_retry_on`, which retries on **any** exception except the following (and their subclasses):
+Requires `langgraph>=1.2`.
 
-- `ValueError`
-- `TypeError`
-- `ArithmeticError`
-- `ImportError`
-- `LookupError`
-- `NameError`
-- `SyntaxError`
-- `RuntimeError`
-- `ReferenceError`
-- `StopIteration`
-- `StopAsyncIteration`
-- `OSError`
 
-For exceptions from popular HTTP libraries such as `requests` and `httpx`, it only retries on 5xx status codes. @[`NodeTimeoutError`] is retryable by default.
+
+An error handler runs after a node fails and all retries are exhausted. It receives the current state and can update it or route to a different node using @[`Command`]. This is useful for compensation flows (Saga patterns) where you want to recover gracefully rather than abort the entire graph.
+
+Pass `error_handler=` to @[`add_node`]:
+
+```python
+from langgraph.errors import NodeError
+from langgraph.types import Command, RetryPolicy
+from langgraph.graph import StateGraph, START
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    status: str
+
+def charge_payment(state: State) -> State:
+    raise RuntimeError("payment gateway timeout")
+
+def payment_error_handler(state: State, error: NodeError) -> Command:
+    return Command(
+        update={"status": f"compensated: {error.error}"},
+        goto="finalize",
+    )
+
+def finalize(state: State) -> State:
+    return state
+
+graph = (
+    StateGraph(State)
+    .add_node(
+        "charge_payment",
+        charge_payment,
+        retry_policy=RetryPolicy(max_attempts=3, retry_on=ConnectionError),
+        error_handler=payment_error_handler,
+    )
+    .add_node("finalize", finalize)
+    .add_edge(START, "charge_payment")
+    .compile()
+)
+```
+
+
+The handler fires only after the retry policy is exhausted, or immediately if no retry policy is configured. The retry policy and the error handler stay decoupled: configure when to retry and when to compensate independently.
 ```
 
 #### Chunk `05aae600ce109ffa` (https://docs.langchain.com/oss/python/langgraph/fault-tolerance#route-with-command)
@@ -1702,12 +1733,13 @@ Reviewer note:
 
 ---
 
-## [q031] How do you implement subgraphs so both parent and child share checkpoint persistence?
+## [q031] Can I embed one compiled graph inside another graph, and where does the checkpointer go?
 
 - **Category:** `multi`
-- **Source:** https://github.com/langchain-ai/langgraph/issues/9276
+- **Source:** https://stackoverflow.com/questions/78541330/can-i-merge-or-compose-graphs-in-langgraph
 - **Must mention:** `checkpointer`
-- **Reference Answer:** Compile child graphs and attach them as nodes in the parent, providing a checkpointer at the parent level.
+- **Reference Answer:** A compiled subgraph can be added as a node of the parent when it shares state keys. When schemas differ, call the subgraph's invoke inside a node function that maps parent state to subgraph state and back. Provide the checkpointer only when compiling the parent and it propagates to child subgraphs.
+- **Notes:** Rewritten: the old reference attached compiled subgraphs directly as nodes, which only one of the two evidence sections supports. The use-subgraphs anchor holds several large example chunks; consider chunk-level gold ids.
 
 ### Evidence Chunks
 
@@ -1967,9 +1999,9 @@ Reviewer note:
 ## [q032] How can I configure both short-term conversational memory and long-term user profile stores?
 
 - **Category:** `multi`
-- **Source:** https://stackoverflow.com/questions/79776520/langchain-based-model-memory
-- **Must mention:** `store`
-- **Reference Answer:** Compile the graph with a checkpointer for conversational threads and pass a store instance for cross-thread profiles.
+- **Source:** https://forum.langchain.com/t/can-create-supervisor-create-react-agent-use-checkpointer-and-store-for-across-thread-memory/1779
+- **Must mention:** `checkpointer`, `store`
+- **Reference Answer:** Compile the graph with both a checkpointer (thread-scoped short-term memory) and a store (cross-thread long-term memory), e.g. builder.compile(checkpointer=checkpointer, store=store); nodes reach the store via the Runtime object.
 
 ### Evidence Chunks
 
@@ -2149,12 +2181,13 @@ Reviewer note:
 
 ---
 
-## [q033] How do you stream intermediate events from child subgraphs while streaming the main graph?
+## [q033] When an orchestrator dispatches sub-agents through tools, how do I print the parent agent's own tokens and also follow each sub-agent's messages from a single streaming run?
 
 - **Category:** `multi`
-- **Source:** https://stackoverflow.com/questions/79963174/langgraph-astream-events-hangs-on-node-with-external-api-call
+- **Source:** https://forum.langchain.com/t/streaming-from-sub-agents-in-the-subagents-pattern/2768
 - **Must mention:** `stream_events`, `subgraphs`
-- **Reference Answer:** Call stream_events with version='v3' and configure subgraphs=True to include nested executions.
+- **Reference Answer:** Call graph.stream_events(input, version="v3"). Iterate stream.messages and print the tokens of each message.text to stream the parent's output, and iterate stream.subgraphs to follow nested work: each subgraph exposes graph_name, path and its own messages, and a named agent dispatched from a tool appears under its name.
+- **Notes:** Old reference said stream_events takes subgraphs=True. The evidence shows stream.subgraphs on the returned stream; subgraphs=True belongs to stream/get_state.
 
 ### Evidence Chunks
 
@@ -2207,12 +2240,13 @@ Reviewer note:
 
 ---
 
-## [q034] How do you inspect a paused execution state and modify state values before resuming?
+## [q034] How do I read the saved state of a thread and then edit it?
 
 - **Category:** `multi`
 - **Source:** docs
 - **Must mention:** `get_state`, `update_state`
-- **Reference Answer:** Fetch the current snapshot with get_state, modify values via update_state, then continue with Command.
+- **Reference Answer:** Fetch the latest StateSnapshot with graph.get_state(config) (values, next, tasks), then edit it with update_state(config, values), which creates a new checkpoint passed through reducers.
+- **Notes:** Removed the 'continue with Command' step: no evidence chunk supports it.
 
 ### Evidence Chunks
 
@@ -2283,7 +2317,7 @@ Reviewer note:
 - **Category:** `multi`
 - **Source:** docs
 - **Must mention:** `entrypoint`, `StateGraph`
-- **Reference Answer:** Replace @entrypoint with a StateGraph instance, converting tasks into nodes connected by add_edge.
+- **Reference Answer:** Define a TypedDict state schema and replace the @entrypoint function with a StateGraph: each task becomes a node (add_node) and Python branching becomes add_conditional_edges with routing functions.
 
 ### Evidence Chunks
 
@@ -2395,8 +2429,8 @@ Reviewer note:
 
 - **Category:** `multi`
 - **Source:** docs
-- **Must mention:** `tools`, `store`
-- **Reference Answer:** Construct an agent with database tools and inject a BaseStore to save cross-thread summaries.
+- **Must mention:** `sql_db_query`, `store`
+- **Reference Answer:** Give the agent database tools (e.g. sql_db_list_tables, sql_db_schema, sql_db_query) and compile the graph with a store so summaries are saved under a namespace and readable across threads.
 
 ### Evidence Chunks
 
@@ -2588,8 +2622,8 @@ Reviewer note:
 - **Category:** `version`
 - **Source:** docs
 - **Must mention:** `interrupt`
-- **Reference Answer:** Call the interrupt function directly within the node to suspend execution and wait for human input.
-- **Notes:** In LangGraph versions prior to 0.2.0, pausing required raising the NodeInterrupt exception from langgraph.errors. Proof: https://github.com/langchain-ai/langgraph/releases/tag/0.2.0
+- **Reference Answer:** Call the interrupt function directly within the node to suspend execution and wait for human input; a checkpointer and thread ID are required.
+- **Notes:** Before langgraph 0.2.47 there was no interrupt() function. It was added in 0.2.47 (older code relied on NodeInterrupt or static breakpoints). Proof: https://github.com/langchain-ai/langgraph/releases/tag/0.2.47
 
 ### Evidence Chunks
 
@@ -2635,8 +2669,8 @@ Reviewer note:
 - **Category:** `version`
 - **Source:** docs
 - **Must mention:** `Command`, `resume`
-- **Reference Answer:** Resume execution by passing Command with a resume payload to invoke or stream_events.
-- **Notes:** Older versions required updating state via graph.update_state() and then invoking graph.invoke(None, config). Proof: https://github.com/langchain-ai/langgraph/releases/tag/0.2.0
+- **Reference Answer:** Resume by calling invoke or stream_events again with Command(resume=...) on the same thread; the value becomes the return value of interrupt().
+- **Notes:** Before langgraph 0.2.47, Command had no resume parameter, so human input was supplied by editing state with update_state and calling invoke(None, config). Proof: https://github.com/langchain-ai/langgraph/releases/tag/0.2.47
 
 ### Evidence Chunks
 
@@ -2674,11 +2708,11 @@ Reviewer note:
 
 ## [q039] How can a node dynamically decide which destination node to trigger next while updating state?
 
-- **Category:** `version`
+- **Category:** `single`
 - **Source:** docs
 - **Must mention:** `Command`, `goto`
-- **Reference Answer:** Return a Command specifying goto to designate the next node and update to modify state.
-- **Notes:** Older versions required registering conditional edges with add_conditional_edges() routing functions. Proof: https://github.com/langchain-ai/langgraph/releases/tag/0.2.0
+- **Reference Answer:** Return a Command specifying update to modify state and goto to name the next node.
+- **Notes:** Reclassified from version to single: the old '0.2.0' proof page does not mention Command or conditional edges, so no version claim can be supported.
 
 ### Evidence Chunks
 
@@ -2809,8 +2843,8 @@ Reviewer note:
 - **Category:** `version`
 - **Source:** docs
 - **Must mention:** `set_node_defaults`
-- **Reference Answer:** Call set_node_defaults on your graph builder to specify shared policies for all nodes.
-- **Notes:** Prior to LangGraph 1.2, graph-wide defaults were unavailable and retry_policy had to be repeated on each add_node call. Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0
+- **Reference Answer:** Call set_node_defaults on the StateGraph builder to set shared retry_policy, error_handler, timeout or cache_policy for all nodes; per-node values still take precedence.
+- **Notes:** Prior to LangGraph 1.2, graph-wide defaults were unavailable and retry_policy had to be repeated on each add_node call. Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0 (feat: add set_node_defaults() to StateGraph, #7747)
 
 ### Evidence Chunks
 
@@ -2862,8 +2896,8 @@ Reviewer note:
 - **Category:** `version`
 - **Source:** docs
 - **Must mention:** `error_handler`, `NodeError`
-- **Reference Answer:** Pass error_handler to add_node, which accepts a function taking state and an injected NodeError parameter.
-- **Notes:** Prior to LangGraph 1.2, add_node had no error_handler parameter and compensation had to be implemented via manual try/except inside the node. Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0
+- **Reference Answer:** Pass error_handler=fn to add_node; fn takes the state and an injected error: NodeError parameter and can return a Command to update state and route elsewhere. It runs only after retries are exhausted.
+- **Notes:** Docs for error_handler state 'Requires langgraph>=1.2' (fault-tolerance#error-handling); 1.2.0 release notes mention error-handler resume (#7773). Before 1.2 compensation was done with try/except inside the node. Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0
 
 ### Evidence Chunks
 
@@ -2952,8 +2986,8 @@ Reviewer note:
 - **Category:** `version`
 - **Source:** docs
 - **Must mention:** `TimeoutPolicy`, `timeout`
-- **Reference Answer:** Pass timeout to add_node as seconds, timedelta, or a TimeoutPolicy instance.
-- **Notes:** Prior to LangGraph 1.2, add_node had no native timeout parameter or TimeoutPolicy class. Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0
+- **Reference Answer:** Pass timeout to add_node as seconds, a timedelta, or a TimeoutPolicy (run_timeout / idle_timeout). Timeouts apply only to async nodes.
+- **Notes:** Docs state 'Requires langgraph>=1.2' (fault-tolerance#timeouts); before 1.2 add_node had no timeout parameter. Proof: https://github.com/langchain-ai/langgraph/releases/tag/1.2.0 (1.2 line) plus the docs chunk.
 
 ### Evidence Chunks
 
@@ -2991,7 +3025,7 @@ Reviewer note:
 
 ---
 
-## [q043] How do I configure CUDA device pinning so graph nodes run on designated GPUs?
+## [q043] Which RetryPolicy argument caps the total wall-clock time a node may spend across all of its retry attempts?
 
 - **Category:** `unanswerable`
 - **Source:** docs
@@ -2999,7 +3033,7 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'cuda' (0 matches), 'gpu' (0 matches), 'device_map' (0 matches). LangGraph is a coordination framework and does not provide native hardware accelerator or CUDA stream device allocation.
+Plain-keyword search over chunks.jsonl (2026-10-22): 'max_elapsed' (0 matches), 'deadline' (0 matches), 'total retry' (0 matches), 'retry budget' (0 matches), 'max_delay' (0 matches), 'across all attempts' (0 matches), 'across retries' (2 matches). Rationale: RetryPolicy arguments documented in the corpus (chunk 7fe140ba1e23a918) are max_attempts, initial_interval, backoff_factor, max_interval (which caps delay between retries, not cumulative time), jitter, and retry_on. Per-attempt timeout is configured via add_node(timeout=...) in chunks 124b7d2b637c8e75 and 1ab1471526869a5d where the timeout clock resets on each attempt; no RetryPolicy argument caps total wall-clock time across all attempts. Hits adjudicated irrelevant: 6d61f021e1b376c4, 1b9a02395c8dcdd2.
 
 [ ] verified
 Reviewer note:
@@ -3014,7 +3048,7 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'Neo4jSaver' (0 matches), 'neo4j checkpointer' (0 matches), 'CypherSaver' (0 matches). LangGraph provides checkpointers for Postgres, SQLite, Mongo, Cosmos, and Oracle, but no built-in Neo4j saver.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'neo4j' (0 matches). Rationale: Documented checkpointers are InMemory, SQLite, Postgres, MongoDB, and Cosmos DB, with no built-in Neo4j checkpointer. Hits adjudicated irrelevant: none.
 
 [ ] verified
 Reviewer note:
@@ -3029,14 +3063,14 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'websocket_endpoint' (0 matches), 'raw websocket' (0 matches), 'socket.io' (0 matches). LangGraph Server documentation covers HTTP and SSE transports, but not custom raw WebSocket framing configuration.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'websocket' (0 matches), 'web socket' (0 matches), 'socket' (0 matches). Rationale: Documented server transport protocols are HTTP and SSE, with no raw WebSocket framing or handlers. Hits adjudicated irrelevant: none.
 
 [ ] verified
 Reviewer note:
 
 ---
 
-## [q046] What parameter sets the automatic background compaction and TTL retention schedule in MemorySaver?
+## [q046] Which InMemorySaver argument caps how many checkpoints are kept per thread?
 
 - **Category:** `unanswerable`
 - **Source:** docs
@@ -3044,14 +3078,14 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'garbage collection' (0 matches), 'compaction schedule' (0 matches), 'ttl retention' (0 matches). MemorySaver stores state in a simple in-memory dictionary without automated background TTL compaction.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'max_checkpoints' (0 matches), 'retention' (1 matches), 'ttl' (3 matches). Rationale: InMemorySaver stores checkpoints in memory without any retention or checkpoint capping argument. Hits adjudicated irrelevant: 16da86313b94feae, 22ae4759d4f0aa55, 1eabea8372a39087, 485938d00611014a.
 
 [ ] verified
 Reviewer note:
 
 ---
 
-## [q047] How can I trigger hot-reloading of modified node functions in a compiled graph without restarting the process?
+## [q047] How do I swap in a modified node function on an already-compiled graph without recompiling it?
 
 - **Category:** `unanswerable`
 - **Source:** docs
@@ -3059,7 +3093,7 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'hot reload' (0 matches), 'live reload' (0 matches), 'reload_node' (0 matches). Compiled graphs are immutable runtime structures that must be recompiled to incorporate new node definitions.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'hot swap' (0 matches), 'hot-swap' (0 matches), 'replace node' (0 matches), 'reload' (0 matches). Rationale: Compiled graphs are immutable structures with no support for swapping node functions without recompilation. Hits adjudicated irrelevant: none.
 
 [ ] verified
 Reviewer note:
@@ -3074,14 +3108,14 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'graphql' (0 matches), 'mutation resolver' (0 matches), 'query type' (0 matches). LangGraph has no built-in GraphQL schema generation or resolver bindings.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'graphql' (0 matches). Rationale: LangGraph provides no GraphQL schema generation or mutation export capabilities. Hits adjudicated irrelevant: none.
 
 [ ] verified
 Reviewer note:
 
 ---
 
-## [q049] Which executor backend allows running graph nodes as independent Kubernetes Pods?
+## [q049] Which setting runs each graph node in its own Kubernetes Pod?
 
 - **Category:** `unanswerable`
 - **Source:** docs
@@ -3089,7 +3123,7 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'kubernetes executor' (0 matches), 'k8s job' (0 matches), 'pod template' (0 matches). LangGraph runs node functions in-process via local threads or asyncio, not as Kubernetes Pods.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'kubernetes' (0 matches), 'k8s' (0 matches), 'pod' (0 matches), 'pods' (0 matches), 'executor' (0 matches). Rationale: Graph nodes execute in-process and there is no executor backend for scheduling individual nodes as Kubernetes pods. Hits adjudicated irrelevant: none.
 
 [ ] verified
 Reviewer note:
@@ -3104,7 +3138,7 @@ Reviewer note:
 - **Reference Answer:** *(None - Unanswerable)*
 
 ### Unanswerability Evidence (Keyword Searches)
-Keyword searches over chunks.jsonl: 'cost calculation' (0 matches), 'dollar cost' (0 matches), 'billing budget' (0 matches). execution_info exposes node attempts, timestamps, and IDs, but does not calculate monetary billing or token costs.
+Plain-keyword search over chunks.jsonl (2026-10-14): 'billing' (5 matches), 'cost' (4 matches), 'token usage' (2 matches), 'dollar' (0 matches). Rationale: The execution_info runtime object exposes retry and tracing metadata only, with no dollar cost or token billing attributes. Hits adjudicated irrelevant: 8910a2ee2e6eceae, 9f8b395e2fca69e3, b16ab7e8fc45f76f, f9f8d48e79be1134, 88b3b001108649f3, f0cfdf3abbe906d0, b4199820f7d508c6, 24e76416b458ca31, 485938d00611014a, e2bc10ee4e354945.
 
 [ ] verified
 Reviewer note:
