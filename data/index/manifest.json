@@ -1,0 +1,13 @@
+{
+  "built_on": "2026-10-22T11:42:41.895396+00:00",
+  "source_commit": "a6e223d2f67558caa20589a03443e918b582943b",
+  "chunks_sha256": "f3614b3f74d9f5ff1a4213937132e9928e7b1904992fbee36092be3bbe046bc5",
+  "n_chunks": 553,
+  "embedding_model": "gemini-embedding-001",
+  "embedding_dim": 768,
+  "files": {
+    "vectors.f16.npy": "089ac1f9f64a9bc4d42e04fa2ba33b349fcf8970398ef9a23efb5e9e4ec147bf",
+    "chunk_meta.jsonl": "f3614b3f74d9f5ff1a4213937132e9928e7b1904992fbee36092be3bbe046bc5",
+    "bm25.json": "8a00720b40d47caeae587a31cb3bb8da899159de7b17ad798e28337119ce61d1"
+  }
+}

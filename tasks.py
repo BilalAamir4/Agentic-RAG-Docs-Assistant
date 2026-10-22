@@ -217,8 +217,10 @@ def cmd_ingest(args: argparse.Namespace, extra_args: list[str]) -> int:
 
 
 def cmd_index(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M04", file=sys.stderr)
-    return 1
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "scripts" / "build_index.py"
+    cmd = [str(py), str(script)] + extra_args
+    return run_command(cmd)
 
 
 def cmd_eval(args: argparse.Namespace, extra_args: list[str]) -> int:

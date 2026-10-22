@@ -87,3 +87,10 @@
 - **Choice:** Implement 11 automated validation checks in `src/ragdocs/eval/validate.py`, including keyword absence verification for unanswerable items with an explicit human-adjudicated clearance file (`data/eval/absence_adjudication.json`), evidence-only `must_mention` verification against an item's own evidence chunks (including version items), case-insensitive 4-gram overlap prevention, and registered verbatim quote verification. Store raw third-party thread HTML/text snapshots in `data/eval/source_snapshots/` which is excluded via `.gitignore`, while committing short attributed quotes and URLs in `data/eval/source_quotes.json`.
 - **Reason:** Guarantees tamper-proof ground-truth validation offline while preventing redistribution of scraped third-party forum content in the repository. Fresh repository clones require local snapshot retrieval before running `verify-sources`.
 - **Date:** 2026-10-22
+
+### D17 Embedding Model and Offline Index Format
+- **Decision:** Embedding model selection, vector storage format, and rate-limit batching strategy.
+- **Choice:** Use `gemini-embedding-001` with `output_dimensionality=768` (L2-normalised by caller). Store dense vectors as float16 (`vectors.f16.npy`, 829.6 KB), chunk metadata in identical row order (`chunk_meta.jsonl`), pre-tokenized BM25 token lists (`bm25.json`), and verified file hashes (`manifest.json`). Cache embeddings via `diskcache` in `cache/embeddings` using SHA-1 keys. Cap API batches at 100 texts and 20,000 tokens with tenacity exponential backoff to respect free-tier 30k TPM rate limits.
+- **Reason:** `text-embedding-004` was decommissioned by Google as of 2026-01-14; `gemini-embedding-001` is the current stable production model supporting Matryoshka dimension reduction to 768. Float16 format saves 50% memory footprint while maintaining numerical stability for runtime dot product search without torch or external vector database dependencies.
+- **Date:** 2026-10-22
+

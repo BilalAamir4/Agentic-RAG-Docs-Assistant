@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     generator_model: str | None = None
     grader_model: str | None = None
     judge_model: str | None = None
-    embedding_model: str | None = None
+    embedding_model: str = "gemini-embedding-001"
     rerank_model: str | None = None
 
     # Embeddings and retrieval parameters

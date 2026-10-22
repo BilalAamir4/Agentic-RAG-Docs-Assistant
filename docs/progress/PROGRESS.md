@@ -8,7 +8,7 @@ Index of implementation modules and their delivery tracking status.
 | M01 | Vercel walking skeleton | Done | 2026-10-12 | [M01-vercel-skeleton.md](M01-vercel-skeleton.md) |
 | M02 | Docs ingestion and chunking | Done | 2026-10-12 | [M02-ingestion.md](M02-ingestion.md) |
 | M03 | Eval set | Done | 2026-10-22 | [M03-eval-set.md](M03-eval-set.md) |
-| M04 | Index build | Not started | - | - |
+| M04 | Index build | Done | 2026-10-22 | [M04-index.md](M04-index.md) |
 | M05 | Hybrid retrieval and reranking | Not started | - | - |
 | M06 | Baseline generation | Not started | - | - |
 | M07 | Eval harness and frozen baseline | Not started | - | - |
