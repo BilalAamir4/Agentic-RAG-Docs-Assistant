@@ -51,8 +51,9 @@ Verification
 2. Both Index Runs:
 - Run 1 (`py tasks.py index` - fresh index build):
   * Chunks indexed: 553
-  * API calls made: 28
-  * Wall time: 476.10 s
+  * Planned API batches: 11 payload calls (averaging 50.27 chunks per payload under the 20,000 token cap; average chunk token count is 286.3 tokens).
+  * API calls made: 28 total HTTP attempts (11 successful payload calls + 17 retry attempts triggered by tenacity exponential backoff on HTTP 429 rate limits).
+  * Wall time: 476.10 s (measured via `time.perf_counter()`). The 25 s sleep in `build.py` runs 5 times between the 6 outer 100-chunk slices (`125 s`), while tenacity exponential backoff delays across the 17 retries and network round-trip latency account for the remaining `351.1 s`.
   * File sizes:
     - `vectors.f16.npy`: 829.6 KB
     - `chunk_meta.jsonl`: 1527.0 KB
@@ -66,7 +67,7 @@ Verification
 
 - Run 2 (`py tasks.py index` - cached rerun):
   * Chunks indexed: 553
-  * API calls made: 0
+  * API calls made: 0 (all 553 chunk embeddings retrieved from `cache/embeddings`)
   * Wall time: 0.21 s
   * File sizes:
     - `vectors.f16.npy`: 829.6 KB
@@ -83,11 +84,40 @@ Verification
 3. Sanity-Check Results (`tools/index_sanity.py`, sample 100, seed 13):
 - BM25 Top-1 Share: 0.99 (99/100, target > 0.85)
 - Dense Top-10 Share: 0.98 (98/100, target > 0.60)
-- Dense failure analysis (2/100):
-  1. Chunk row 37: title='Memory', heading_path=['Manage short-term memory', 'Manage checkpoints']
-     - Read on failure: The query derived from title and heading path ("Memory Manage short-term memory Manage checkpoints") consists of high-level architectural keywords that occur prominently across multiple introductory checkpointer and persistence guides (e.g. checkpointers.mdx, persistence.mdx). Those parent overview chunks received higher cosine similarity scores, ranking row 37 just outside the top-10.
-  2. Chunk row 22: title='Memory', heading_path=['Add long-term memory', 'Use in production']
-     - Read on failure: The query combines broad operational terminology ("Memory Add long-term memory Use in production") which matches several general deployment guides and production-readiness tutorials that discuss production memory management in broader terms, causing the specific sub-chunk to rank outside the top 10.
+- Actual top-10 retrieval inspect for the 2 dense failures:
+  * Target Row 37:
+    - Target: Title='Memory', Heading path=['Manage short-term memory', 'Manage checkpoints'] (`add-memory.mdx#manage-checkpoints`)
+    - Query text: `'Memory Manage short-term memory Manage checkpoints'`
+    - Target Score: 0.7236 | Target Rank: **12** of 553
+    - Actual Top-10 retrieved:
+      1. Rank 1 (Row 33, Score 0.7536): Memory -> Manage short-term memory > Manage checkpoints (`add-memory.mdx#manage-checkpoints`)
+      2. Rank 2 (Row 36, Score 0.7418): Memory -> Manage short-term memory > Manage checkpoints (`add-memory.mdx#manage-checkpoints`)
+      3. Rank 3 (Row 8, Score 0.7407): Memory -> Add short-term memory > Use in production (`add-memory.mdx#use-in-production`)
+      4. Rank 4 (Row 25, Score 0.7399): Memory -> Manage short-term memory (`add-memory.mdx#manage-short-term-memory`)
+      5. Rank 5 (Row 34, Score 0.7365): Memory -> Manage short-term memory > Manage checkpoints (`add-memory.mdx#manage-checkpoints`)
+      6. Rank 6 (Row 433, Score 0.7351): Use the functional API -> Short-term memory > Manage checkpoints (`use-functional-api.mdx#manage-checkpoints`)
+      7. Rank 7 (Row 11, Score 0.7339): Memory -> Add short-term memory > Use in subgraphs (`add-memory.mdx#use-in-subgraphs`)
+      8. Rank 8 (Row 1, Score 0.7320): Memory -> Add short-term memory > Use in production (`add-memory.mdx#use-in-production`)
+      9. Rank 9 (Row 35, Score 0.7315): Memory -> Manage short-term memory > Manage checkpoints (`add-memory.mdx#manage-checkpoints`)
+      10. Rank 10 (Row 0, Score 0.7296): Memory -> Add short-term memory (`add-memory.mdx#add-short-term-memory`)
+    - Failure read: Row 37 is the 5th chunk of a multi-chunk documentation section (`Manage short-term memory > Manage checkpoints`). Sibling chunks from the identical section (Rows 33, 36, 34, 35) took ranks 1, 2, 5, and 9 with higher scores (0.7315–0.7536). The dense retriever correctly identified the exact documentation section, but sister chunks within the same section filled the top-10 slots.
+
+  * Target Row 22:
+    - Target: Title='Memory', Heading path=['Add long-term memory', 'Use in production'] (`add-memory.mdx#use-in-production-2`)
+    - Query text: `'Memory Add long-term memory Use in production'`
+    - Target Score: 0.7801 | Target Rank: **11** of 553
+    - Actual Top-10 retrieved:
+      1. Rank 1 (Row 1, Score 0.8066): Memory -> Add short-term memory > Use in production (`add-memory.mdx#use-in-production`)
+      2. Rank 2 (Row 8, Score 0.8011): Memory -> Add short-term memory > Use in production (`add-memory.mdx#use-in-production`)
+      3. Rank 3 (Row 14, Score 0.8002): Memory -> Add long-term memory > Use in production (`add-memory.mdx#use-in-production-2`)
+      4. Rank 4 (Row 20, Score 0.7901): Memory -> Add long-term memory > Use in production (`add-memory.mdx#use-in-production-2`)
+      5. Rank 5 (Row 16, Score 0.7875): Memory -> Add long-term memory > Use in production (`add-memory.mdx#use-in-production-2`)
+      6. Rank 6 (Row 2, Score 0.7851): Memory -> Add short-term memory > Use in production (`add-memory.mdx#use-in-production`)
+      7. Rank 7 (Row 12, Score 0.7842): Memory -> Add long-term memory (`add-memory.mdx#add-long-term-memory`)
+      8. Rank 8 (Row 19, Score 0.7835): Memory -> Add long-term memory > Use in production (`add-memory.mdx#use-in-production-2`)
+      9. Rank 9 (Row 9, Score 0.7830): Memory -> Add short-term memory > Use in production (`add-memory.mdx#use-in-production`)
+      10. Rank 10 (Row 18, Score 0.7819): Memory -> Add long-term memory > Use in production (`add-memory.mdx#use-in-production-2`)
+    - Failure read: Row 22 missed rank 10 by a score delta of 0.0018 (0.7801 vs 0.7819). Five sibling chunks from the identical section (`add-memory.mdx#use-in-production-2`, rows 14, 16, 18, 19, 20) took ranks 3, 4, 5, 8, and 10. Again, dense retrieval correctly localized the exact technical topic and page, but sibling chunks of the same multi-chunk section filled the top positions.
 
 4. Bundle-Check Total:
 - Total bundle size: 227.49 MB (limit: 400.00 MB)
@@ -107,16 +137,16 @@ Verification
 
 Decisions made
 - D17 in docs/DECISIONS.md: Selected `gemini-embedding-001` at 768 dimensions with float16 numpy on-disk representation (`vectors.f16.npy`).
-- Token-aware batching cap: Capped batches in `GeminiEmbedder` at 20,000 tokens (and 100 texts). Documentation chunks average ~300 tokens; a naive 100-chunk batch totals ~32,500 tokens, which instantly exceeds the Google AI Studio free-tier 30,000 TPM limit in a single request and triggers unrecoverable 429 quota exhaustion.
-- Rate-limit pacing: Added a 25 s pause between uncached batches in `build_index` to stay comfortably within the 30k TPM rolling window, completing full index construction in 7.9 minutes.
+- Token-aware batching cap: Capped batches in `GeminiEmbedder` at 20,000 tokens (and 100 texts). Documentation chunks average 286.3 tokens; a naive 100-chunk batch totals ~32,500 tokens, which instantly exceeds the Google AI Studio free-tier 30,000 TPM limit in a single request and triggers unrecoverable 429 quota exhaustion.
+- Rate-limit pacing: Added a 25 s pause between uncached outer slices in `build_index` to stay comfortably within the 30k TPM rolling window, completing full index construction in 7.9 minutes.
 
 Deviations from the prompt
 - Token-aware batching in addition to max batch size: While the prompt specified batching at the verified maximum (100), sending 100 full documentation chunks produces ~32,500 tokens, exceeding the free tier 30,000 TPM limit in a single request. `GeminiEmbedder` therefore batches by `min(100, texts_fitting_in_20k_tokens)`.
 - Tenacity backoff parameter adjustment: Enhanced backoff logic to inspect API `RetryInfo` delay strings and apply a minimum 35 s backoff after multiple 429s, ensuring the rolling 1-minute window has reset before retrying.
 
 Known issues and limitations
-- Free-tier 1,000 requests-per-day cap: Building the index from scratch consumes ~553 requests against the 1,000 RPD daily quota. Disk caching completely eliminates API consumption on repeated runs, but multiple full index rebuilds on fresh machines in a single day require multiple API keys or a paid tier.
-- Semantic confusion on broad section headings: Two chunks with broad headings ("Memory") missed top-10 dense retrieval due to dense clustering with adjacent overview documents. Hybrid retrieval in M05 will combine BM25 to resolve these exact lexical queries.
+- Free-tier 1,000 requests-per-day item accounting: The Google AI Studio free tier limits requests to 100 RPM, 30,000 TPM, and 1,000 RPD (`EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier`). The API error detail on 101 items (`BatchEmbedContentsRequest.requests: at most 100 requests can be in one batch`) indicates that Google treats each item inside a batch as an individual request toward quota. Building the index from scratch consumes ~553 item request units from the 1,000 RPD quota. Disk caching completely eliminates API consumption on repeated runs, but multiple full index rebuilds on fresh machines in a single day require multiple API keys or a paid tier.
+- Multi-chunk section disambiguation in dense retrieval: In 2 of 100 sampled sanity chunks (rows 37 and 22), the query matched the correct section anchor, but sibling chunks from the same multi-chunk section scored higher and filled the top-10 slots. Hybrid retrieval in M05 combining BM25 will provide lexical token signals to disambiguate specific chunks.
 
 Open questions for the human
 - None.
