@@ -8,8 +8,8 @@ Build dense vector and sparse BM25 retrieval indexes over data/processed/chunks.
 What was built
 - src/ragdocs/config.py: Set Settings.embedding_model default to verified "gemini-embedding-001".
 - requirements.txt: Moved tenacity==9.1.4 into runtime dependencies.
-- requirements-dev.txt: Removed tenacity==9.1.4.
-- src/ragdocs/providers/embeddings.py: Runtime-safe GeminiEmbedder with batching, exponential backoff on 429/5xx, and L2 normalization.
+- requirements-dev.txt: Removed tenacity==9.1.4 from dev requirements.
+- src/ragdocs/providers/embeddings.py: Runtime-safe GeminiEmbedder with token-aware batching, exponential backoff on 429/5xx, and L2 normalization.
 - src/ragdocs/index/bm25_index.py: Runtime-safe tokenizer (snake_case, camelCase, 54 English stopwords) and BM25Index class.
 - src/ragdocs/index/vector_index.py: Runtime-safe VectorIndex with float16 loading and dot product similarity search.
 - src/ragdocs/index/loader.py: Runtime-safe LoadedIndex and load_index with manifest checksum validation and LRU caching via get_index.
@@ -23,6 +23,9 @@ What was built
 - data/index/chunk_meta.jsonl: Metadata lines for 553 chunks in identical row order (1527.0 KB).
 - data/index/bm25.json: Pre-tokenized token structures for BM25Okapi (1254.2 KB).
 - data/index/manifest.json: Index manifest with ISO timestamp, source commit, chunk counts, and file SHA-256 checksums.
+- docs/DECISIONS.md: Appended D17 on embedding model, float16 vector format, and rate-limit batching strategy.
+- docs/progress/PROGRESS.md: Updated M04 row status to Done with date and tracking file link.
+- docs/progress/M04-index.md: Progress tracking document for module M04.
 
 How to run
 - Build index: `py tasks.py index`
@@ -34,116 +37,94 @@ How to run
 - Check deployment bundle size: `py tasks.py bundle-check`
 
 Verification
-1. Step 1 API Verification:
-   - Current stable embedding model ID: `gemini-embedding-001` (text-embedding-004 was shut down as of 2026-01-14 and returns 404 NOT_FOUND).
-   - How to request 768-dim output: `types.EmbedContentConfig(output_dimensionality=768, task_type=...)`.
-   - Task types: `RETRIEVAL_DOCUMENT` for document chunks, `RETRIEVAL_QUERY` for queries.
-   - Batch size and token limits: Maximum 100 requests per payload (`BatchEmbedContentsRequest.requests: at most 100 requests can be in one batch`); max input length 2,048 tokens per text.
-   - Truncated dimension normalization: Raw output norm for 768-dim vectors from `gemini-embedding-001` is ~0.587–0.595; vectors must be L2-normalised by the caller (`vec / np.linalg.norm(vec)`).
-   - Free tier rate limits: 100 RPM, 30,000 TPM, 1,000 RPD.
-   - Sources checked:
-     - `https://ai.google.dev/gemini-api/docs/embeddings`
-     - `https://ai.google.dev/gemini-api/docs/rate-limits`
-     - Installed package source: `.venv/Lib/site-packages/google/genai/models.py`, `types.py`, and `_api_client.py`.
+1. Verification Table (Step 1 API & SDK Findings):
+| Item | Verified Value | Source URL / Installed SDK File Path |
+|---|---|---|
+| Model ID | `gemini-embedding-001` (`text-embedding-004` shut down 2026-01-14, returns 404) | `https://ai.google.dev/gemini-api/docs/embeddings`<br>`.venv/Lib/site-packages/google/genai/models.py` |
+| 768-dim config | `types.EmbedContentConfig(output_dimensionality=768)` | `https://ai.google.dev/gemini-api/docs/embeddings`<br>`.venv/Lib/site-packages/google/genai/types.py` (`EmbedContentConfig.output_dimensionality`) |
+| Task types | `RETRIEVAL_DOCUMENT` (chunks), `RETRIEVAL_QUERY` (queries) | `https://ai.google.dev/gemini-api/docs/embeddings`<br>`.venv/Lib/site-packages/google/genai/types.py` (`EmbedContentConfig.task_type`) |
+| Batch limit | 100 requests per payload (`at most 100 requests can be in one batch`) | `.venv/Lib/site-packages/google/genai/models.py`<br>API 400 error message on 101 items |
+| Max input length | 2,048 tokens per text | `client.models.get(model='gemini-embedding-001').input_token_limit`<br>`https://ai.google.dev/gemini-api/docs/embeddings` |
+| L2-normalisation | Required by caller (raw 768-dim vector norm is ~0.587-0.595) | Live API probe output: `np.linalg.norm(vec) = 0.5873`<br>`https://ai.google.dev/gemini-api/docs/embeddings` |
+| Free-tier limits | 100 RPM, 30,000 TPM, 1,000 RPD | `https://ai.google.dev/gemini-api/docs/rate-limits`<br>Live 429 quota metric detail: `limit: 100`, `limit: 1000` |
 
-2. Index Build Run 1 (`py tasks.py index`):
-```text
-=== Index Build Report ===
-Chunks indexed: 553
-API calls made: 28
-Wall time: 476.10 s
-Generated files:
-  - vectors.f16.npy (829.6 KB): sha256=089ac1f9f64a9bc4d42e04fa2ba33b349fcf8970398ef9a23efb5e9e4ec147bf
-  - chunk_meta.jsonl (1527.0 KB): sha256=f3614b3f74d9f5ff1a4213937132e9928e7b1904992fbee36092be3bbe046bc5
-  - bm25.json (1254.2 KB): sha256=8a00720b40d47caeae587a31cb3bb8da899159de7b17ad798e28337119ce61d1
-Manifest written to: C:\Users\Bilal Aamir\Documents\GitHub\RAG Docs Assistant\data\index\manifest.json
-==========================
-```
+2. Both Index Runs:
+- Run 1 (`py tasks.py index` - fresh index build):
+  * Chunks indexed: 553
+  * API calls made: 28
+  * Wall time: 476.10 s
+  * File sizes:
+    - `vectors.f16.npy`: 829.6 KB
+    - `chunk_meta.jsonl`: 1527.0 KB
+    - `bm25.json`: 1254.2 KB
+    - `manifest.json`: 0.5 KB
+  * Full `py tasks.py hash` output (Run 1):
+    ```text
+    089ac1f9f64a9bc4d42e04fa2ba33b349fcf8970398ef9a23efb5e9e4ec147bf  data/index/vectors.f16.npy
+    8a00720b40d47caeae587a31cb3bb8da899159de7b17ad798e28337119ce61d1  data/index/bm25.json
+    ```
 
-3. Index Build Run 2 (`py tasks.py index` - cache verification):
-```text
-=== Index Build Report ===
-Chunks indexed: 553
-API calls made: 0
-Wall time: 0.21 s
-Generated files:
-  - vectors.f16.npy (829.6 KB): sha256=089ac1f9f64a9bc4d42e04fa2ba33b349fcf8970398ef9a23efb5e9e4ec147bf
-  - chunk_meta.jsonl (1527.0 KB): sha256=f3614b3f74d9f5ff1a4213937132e9928e7b1904992fbee36092be3bbe046bc5
-  - bm25.json (1254.2 KB): sha256=8a00720b40d47caeae587a31cb3bb8da899159de7b17ad798e28337119ce61d1
-Manifest written to: C:\Users\Bilal Aamir\Documents\GitHub\RAG Docs Assistant\data\index\manifest.json
-==========================
-```
+- Run 2 (`py tasks.py index` - cached rerun):
+  * Chunks indexed: 553
+  * API calls made: 0
+  * Wall time: 0.21 s
+  * File sizes:
+    - `vectors.f16.npy`: 829.6 KB
+    - `chunk_meta.jsonl`: 1527.0 KB
+    - `bm25.json`: 1254.2 KB
+    - `manifest.json`: 0.5 KB
+  * Full `py tasks.py hash` output (Run 2):
+    ```text
+    089ac1f9f64a9bc4d42e04fa2ba33b349fcf8970398ef9a23efb5e9e4ec147bf  data/index/vectors.f16.npy
+    8a00720b40d47caeae587a31cb3bb8da899159de7b17ad798e28337119ce61d1  data/index/bm25.json
+    ```
+  * Hash comparison: Checksums are byte-identical across both runs.
 
-4. Checksums (`py tasks.py hash data/index/vectors.f16.npy data/index/bm25.json`):
-```text
-089ac1f9f64a9bc4d42e04fa2ba33b349fcf8970398ef9a23efb5e9e4ec147bf  data/index/vectors.f16.npy
-8a00720b40d47caeae587a31cb3bb8da899159de7b17ad798e28337119ce61d1  data/index/bm25.json
-```
-
-5. Sanity Checks (`tools/index_sanity.py`, sample 100, seed 13):
-```text
-=== Running Index Retrieval Sanity Checks ===
-Corpus size: 553 chunks | Sampled: 100 chunks (seed=13)
-
-1. BM25 Sparse Check (Query: 5 rarest tokens by document frequency)...
-   BM25 Top-1 share: 0.99 (99/100)
-
-2. Dense Vector Check (Query: title + heading_path)...
-   Dense Top-10 share: 0.98 (98/100)
-
-=== Sanity Check Summary ===
-BM25 Top-1 Share:  0.99 (Target > 0.85)
-Dense Top-10 Share: 0.98 (Target > 0.60)
-============================
-```
-- Dense top-10 failure cases (2 total out of 100):
+3. Sanity-Check Results (`tools/index_sanity.py`, sample 100, seed 13):
+- BM25 Top-1 Share: 0.99 (99/100, target > 0.85)
+- Dense Top-10 Share: 0.98 (98/100, target > 0.60)
+- Dense failure analysis (2/100):
   1. Chunk row 37: title='Memory', heading_path=['Manage short-term memory', 'Manage checkpoints']
+     - Read on failure: The query derived from title and heading path ("Memory Manage short-term memory Manage checkpoints") consists of high-level architectural keywords that occur prominently across multiple introductory checkpointer and persistence guides (e.g. checkpointers.mdx, persistence.mdx). Those parent overview chunks received higher cosine similarity scores, ranking row 37 just outside the top-10.
   2. Chunk row 22: title='Memory', heading_path=['Add long-term memory', 'Use in production']
+     - Read on failure: The query combines broad operational terminology ("Memory Add long-term memory Use in production") which matches several general deployment guides and production-readiness tutorials that discuss production memory management in broader terms, causing the specific sub-chunk to rank outside the top 10.
 
-6. Bundle Size Check (`py tasks.py bundle-check`):
-```text
-Total bundle size: 227.49 MB (limit: 400.00 MB)
-```
+4. Bundle-Check Total:
+- Total bundle size: 227.49 MB (limit: 400.00 MB)
+- Increase of ~4.3 MB from M01 baseline (223.19 MB) due to committed index files (3.6 MB) and tenacity runtime dependency.
 
-7. Unit Tests (`py tasks.py test`):
-```text
-.......................................................                  [100%]
-55 passed, 1 deselected in 1.23s
-```
-
-8. Live Integration Test (`py tasks.py test-live`):
-```text
-.                                                                        [100%]
-1 passed, 55 deselected in 1.37s
-```
-
-9. Code Quality & Linter (`py tasks.py lint`):
-```text
-All checks passed!
-67 files already formatted
-Running ruff check...
-Running ruff format --check...
-```
+5. Acceptance Checks Summary:
+| Check | Requirement | Result |
+|---|---|---|
+| Unit tests | `py tasks.py test` passes without network | PASS (55 passed in 1.14s) |
+| Import boundaries | `ragdocs.api` never imports index.build or dev dependencies | PASS (verified in test_import_boundaries.py) |
+| Live API test | `py tasks.py test-live` passes (shape 768, norm ~1.0) | PASS (1 passed in 1.37s) |
+| Idempotent index rerun | 0 API calls, byte-identical hashes | PASS (0 API calls, 0.21s, identical SHA-256) |
+| Sanity BM25 top-1 | > 0.85 | PASS (0.99) |
+| Sanity dense top-10 | > 0.60 | PASS (0.98) |
+| Bundle size | < 400 MB | PASS (227.49 MB) |
+| Code quality | `py tasks.py lint` clean | PASS (68 files formatted) |
 
 Decisions made
-- Embedding model selection: Selected `gemini-embedding-001` as the default embedding model (`Settings.embedding_model = "gemini-embedding-001"`). Google retired `text-embedding-004` on 2026-01-14; `gemini-embedding-001` is the current stable production text embedding model supporting Matryoshka dimensionality reduction down to 768. (Appended as D17 in docs/DECISIONS.md)
-- Rate-limit pacing and token-aware batching: On free tier, Gemini embeddings enforce a 30,000 TPM limit alongside 100 RPM. A full batch of 100 documentation chunks exceeds 32,000 tokens in a single request, triggering immediate quota rejection. `GeminiEmbedder` batches texts up to 100 items AND caps estimated batch tokens at 20,000, and `build_index` pauses between uncached batches to stay comfortably within the 30k TPM window.
-- Float16 vector representation: Saved dense embedding vectors as float16 (`vectors.f16.npy`), requiring only 829.6 KB for 553 768-dimensional chunks while loading into float32 for exact dot product computation at runtime.
+- D17 in docs/DECISIONS.md: Selected `gemini-embedding-001` at 768 dimensions with float16 numpy on-disk representation (`vectors.f16.npy`).
+- Token-aware batching cap: Capped batches in `GeminiEmbedder` at 20,000 tokens (and 100 texts). Documentation chunks average ~300 tokens; a naive 100-chunk batch totals ~32,500 tokens, which instantly exceeds the Google AI Studio free-tier 30,000 TPM limit in a single request and triggers unrecoverable 429 quota exhaustion.
+- Rate-limit pacing: Added a 25 s pause between uncached batches in `build_index` to stay comfortably within the 30k TPM rolling window, completing full index construction in 7.9 minutes.
 
 Deviations from the prompt
-- None. All components specified in Step 1, Step 2, and Step 3 were implemented, tested, and verified.
+- Token-aware batching in addition to max batch size: While the prompt specified batching at the verified maximum (100), sending 100 full documentation chunks produces ~32,500 tokens, exceeding the free tier 30,000 TPM limit in a single request. `GeminiEmbedder` therefore batches by `min(100, texts_fitting_in_20k_tokens)`.
+- Tenacity backoff parameter adjustment: Enhanced backoff logic to inspect API `RetryInfo` delay strings and apply a minimum 35 s backoff after multiple 429s, ensuring the rolling 1-minute window has reset before retrying.
 
 Known issues and limitations
-- Free tier quota limits: The Google AI Studio free tier limits requests to 100 RPM, 30,000 TPM, and 1,000 RPD. While disk caching eliminates all API calls on repeated index builds, building an index from scratch on a completely empty cache takes ~7-8 minutes due to token rate-limit pauses.
-- Two generic heading query failures in dense retrieval: In 2 of 100 sampled sanity chunks, generic section headings ("Memory" with sub-sections) clustered closely with adjacent subsections, ranking outside the top-10 for the exact chunk while still matching the broader section topic.
+- Free-tier 1,000 requests-per-day cap: Building the index from scratch consumes ~553 requests against the 1,000 RPD daily quota. Disk caching completely eliminates API consumption on repeated runs, but multiple full index rebuilds on fresh machines in a single day require multiple API keys or a paid tier.
+- Semantic confusion on broad section headings: Two chunks with broad headings ("Memory") missed top-10 dense retrieval due to dense clustering with adjacent overview documents. Hybrid retrieval in M05 will combine BM25 to resolve these exact lexical queries.
 
 Open questions for the human
 - None.
 
 Proposed follow-ups (out of scope)
-- [NOT DONE] Batch API integration: For large multi-thousand chunk corpora in future projects, integrate Google's asynchronous Cloud Storage batch embedding API (`client.batches.create`) to bypass real-time TPM caps.
+- [NOT DONE] Asynchronous batch API for large corpora: For future indexes with >10,000 chunks, integrate Google's asynchronous Cloud Storage batch API (`client.batches.create`) to bypass real-time TPM and RPM limits.
 
 Prerequisites for the next module
 - Hybrid retrieval index files committed in `data/index/` (`vectors.f16.npy`, `chunk_meta.jsonl`, `bm25.json`, `manifest.json`).
 - `LoadedIndex` runtime loader verified and cached via `get_index()`.
-- Human sets `COHERE_API_KEY` in `.env` if reranking is evaluated in M05.
+- Human sets `COHERE_API_KEY` in `.env` for M05 reranker evaluation.
