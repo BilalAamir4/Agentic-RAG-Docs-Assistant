@@ -24,7 +24,7 @@ Code quality: type hints and docstrings on all public functions; pydantic models
 Tests: each module adds pytest tests. Unit tests never touch the network; mock external clients. Tests that call real APIs are marked @pytest.mark.live.
 Verification: before finishing, run py tasks.py lint and py tasks.py test and paste the real summary lines into the tracking file. Never state that something passed without running it.
 Git: commit only when the module prompt says to, and push only when it says to. Message format "MNN: imperative summary". Never add Co-authored-by or any other AI attribution trailer. Never change the origin remote.
-Generated data (data/processed, data/index, results) is produced by scripts, never edited by hand. data/eval/eval_set.jsonl is the one file the human edits.
+Generated data (data/processed, data/index, results) is produced by scripts, never edited by hand. data/eval/eval_set.jsonl is the one file the human edits. After M03 sign-off, data/eval/eval_set.jsonl is frozen at tag eval-set-v1. Do not edit it; a change needs a new version tag and an entry in docs/DECISIONS.md (see D15).
 Ambiguity: when two reasonable readings of an instruction exist and the choice matters, stop and ask. Also record the question under "Open questions" in the tracking file.
 Writing: plain and specific, numbers with units, no marketing language, no emoji.
 Tracking file template (docs/progress/MNN-short-name.md)

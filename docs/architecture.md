@@ -12,13 +12,28 @@ Online inference is designed for free-tier serverless execution on Vercel. A sta
 │   └── index.py
 ├── data/
 │   ├── eval/
-│   │   └── .gitkeep
+│   │   ├── source_snapshots/
+│   │   ├── absence_adjudication.json
+│   │   ├── absence_terms.json
+│   │   ├── AUDIT.md
+│   │   ├── eval_set.jsonl
+│   │   ├── README.md
+│   │   ├── REVIEW.md
+│   │   ├── source_quotes.json
+│   │   ├── SOURCES_LOG.md
+│   │   ├── SOURCE_SPOTCHECK.md
+│   │   └── STATUS_AUDIT.md
 │   ├── index/
 │   │   └── .gitkeep
 │   └── processed/
-│       └── .gitkeep
+│       ├── chunks.jsonl
+│       └── docs.jsonl
 ├── docs/
 │   ├── progress/
+│   │   ├── M00-scaffold.md
+│   │   ├── M01-vercel-skeleton.md
+│   │   ├── M02-ingestion.md
+│   │   ├── M03-eval-set.md
 │   │   └── PROGRESS.md
 │   ├── architecture.md
 │   └── DECISIONS.md
@@ -28,13 +43,23 @@ Online inference is designed for free-tier serverless execution on Vercel. A sta
 │   └── runs/
 │       └── .gitkeep
 ├── scripts/
-│   └── .gitkeep
+│   ├── audit_eval.py
+│   ├── check_unanswerable.py
+│   ├── make_review_sheet.py
+│   ├── validate_eval.py
+│   └── verify_source_quotes.py
 ├── src/
 │   └── ragdocs/
 │       ├── api/
 │       │   └── __init__.py
 │       ├── eval/
-│       │   └── __init__.py
+│       │   ├── __init__.py
+│       │   ├── absence.py
+│       │   ├── audit.py
+│       │   ├── config.py
+│       │   ├── review.py
+│       │   ├── validate.py
+│       │   └── verify_sources.py
 │       ├── generation/
 │       │   └── __init__.py
 │       ├── index/
@@ -57,7 +82,9 @@ Online inference is designed for free-tier serverless execution on Vercel. A sta
 ├── tests/
 │   ├── test_config.py
 │   ├── test_io_utils.py
-│   └── test_schemas.py
+│   ├── test_schemas.py
+│   ├── test_validate_eval.py
+│   └── test_verify_source_quotes.py
 ├── tools/
 │   └── .gitkeep
 ├── .env.example

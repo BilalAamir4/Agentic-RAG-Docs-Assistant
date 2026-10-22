@@ -33,7 +33,7 @@ The dataset contains exactly 50 items distributed across four categories:
   - For version items: records the outdated answer, migration rationale, and proof URL.
   - For unanswerable items: records exact plain-keyword search results over `chunks.jsonl` in the canonical format:
     `Plain-keyword search over chunks.jsonl (<YYYY-MM-DD>): 'term1' (N matches), 'term2' (N matches), ... Rationale: <one sentence on why the corpus does not answer this>. Hits adjudicated irrelevant: <ids or none>.`
-- `verified` (`bool`): Set to `true` once human review confirms correctness. Initial draft always has `false`.
+- `verified` (`bool`): Set to `true` once human review confirms correctness (50/50 items verified for eval-set-v1 sign-off).
 
 ## Sourcing, Absence, and Quality Rules
 
