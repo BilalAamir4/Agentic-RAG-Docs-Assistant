@@ -1,0 +1,23 @@
+{
+  "date": "20261025",
+  "git_commit": "b3d14a5cdc1f8be1a26ab335ffbec0cb1fc96190",
+  "index_manifest_hash": "c4576449f124f646b5908b241f89dd216250a7fc12eb6cbbb94505308cbf512e",
+  "model_ids": {
+    "embedding_model": "gemini-embedding-001",
+    "rerank_model": "rerank-v3.5"
+  },
+  "settings": {
+    "embedding_dim": 768,
+    "dense_k": 20,
+    "bm25_k": 20,
+    "rrf_k": 60,
+    "fused_k": 20,
+    "rerank_top_n": 5,
+    "final_k": 5,
+    "use_reranker": false
+  },
+  "api_calls_made": {
+    "query_embeddings": 0,
+    "rerank_requests": 0
+  }
+}

@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     grader_model: str | None = None
     judge_model: str | None = None
     embedding_model: str = "gemini-embedding-001"
-    rerank_model: str | None = None
+    rerank_model: str = "rerank-v3.5"
+    use_reranker: bool = False
 
     # Embeddings and retrieval parameters
     embedding_dim: int = 768

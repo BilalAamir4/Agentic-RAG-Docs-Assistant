@@ -9,7 +9,7 @@ Index of implementation modules and their delivery tracking status.
 | M02 | Docs ingestion and chunking | Done | 2026-10-12 | [M02-ingestion.md](M02-ingestion.md) |
 | M03 | Eval set | Done | 2026-10-22 | [M03-eval-set.md](M03-eval-set.md) |
 | M04 | Index build | Done | 2026-10-22 | [M04-index.md](M04-index.md) |
-| M05 | Hybrid retrieval and reranking | Not started | - | - |
+| M05 | Hybrid retrieval and reranking | Done | 2026-10-25 | [M05-retrieval.md](M05-retrieval.md) |
 | M06 | Baseline generation | Not started | - | - |
 | M07 | Eval harness and frozen baseline | Not started | - | - |
 | M08 | Corrective RAG | Not started | - | - |

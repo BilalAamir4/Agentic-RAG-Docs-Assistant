@@ -32,6 +32,7 @@
 - **Choice:** Cohere Rerank behind a Reranker interface with a no-op option.
 - **Reason:** State-of-the-art cross-encoder reranking to boost top-k precision.
 - **Gate:** In M05: under 3 questions of hit@5 gain means rerank is disabled in production.
+- **Gate Decision (M05):** FAIL (reranking disabled in production, `use_reranker = False`). On the 42-question benchmark, `hybrid` hit@5 is 34/42 (81.0%) and `hybrid_rerank` hit@5 is 35/42 (83.3%). Gain is 1 question (35 - 34 = 1), which is under the 3-question threshold. Furthermore, reranking degraded Hit@1 from 22/42 (52.4%) to 17/42 (40.5%) and MRR from 0.631 to 0.575. Consequently, `Settings.use_reranker` defaults to `False` in production, using `NoopReranker`.
 
 ### D7 Generation and Evaluation Models
 - **Decision:** LLM providers for generation, grading, and offline judge.
