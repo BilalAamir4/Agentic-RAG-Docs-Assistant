@@ -1,9 +1,10 @@
 """Hybrid retriever combining dense semantic search, BM25 sparse search, and reranking."""
 
+from functools import lru_cache
 from typing import Any, Literal
 
 from ragdocs.config import Settings, get_settings
-from ragdocs.index.loader import LoadedIndex
+from ragdocs.index.loader import LoadedIndex, get_index
 from ragdocs.providers.reranker import Reranker
 from ragdocs.retrieval.fusion import reciprocal_rank_fusion
 from ragdocs.schemas import RetrievedChunk
@@ -64,17 +65,20 @@ class HybridRetriever:
     def retrieve(
         self,
         query: str,
-        mode: RetrievalMode = "hybrid_rerank",
+        mode: RetrievalMode | None = None,
     ) -> list[RetrievedChunk]:
         """Retrieve top chunks for query according to the specified mode.
 
         Args:
             query: User query string.
             mode: Retrieval pipeline mode ('dense', 'bm25', 'hybrid', 'hybrid_rerank').
+                Defaults to 'hybrid_rerank' if use_reranker is True, else 'hybrid'.
 
         Returns:
             List of RetrievedChunk instances up to final_k in length with 1-based ranks.
         """
+        if mode is None:
+            mode = "hybrid_rerank" if self.settings.use_reranker else "hybrid"
         if mode == "dense":
             query_vec = self.embedder.embed_query(query)
             dense_results = self.index.vector_index.search(query_vec, k=self.settings.dense_k)
@@ -137,3 +141,21 @@ class HybridRetriever:
             ]
 
         raise ValueError(f"Unknown retrieval mode: {mode}")
+
+
+@lru_cache
+def get_retriever(settings: Settings | None = None) -> HybridRetriever:
+    """Return cached HybridRetriever initialized from default settings and index."""
+    s = settings or get_settings()
+    index = get_index()
+    from ragdocs.providers.embeddings import GeminiEmbedder
+    from ragdocs.providers.reranker import get_reranker
+
+    embedder = GeminiEmbedder(s)
+    reranker = get_reranker(s)
+    return HybridRetriever(
+        index=index,
+        embedder=embedder,
+        reranker=reranker,
+        settings=s,
+    )

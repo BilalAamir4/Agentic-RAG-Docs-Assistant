@@ -10,7 +10,7 @@ Index of implementation modules and their delivery tracking status.
 | M03 | Eval set | Done | 2026-10-22 | [M03-eval-set.md](M03-eval-set.md) |
 | M04 | Index build | Done | 2026-10-22 | [M04-index.md](M04-index.md) |
 | M05 | Hybrid retrieval and reranking | Done | 2026-10-25 | [M05-retrieval.md](M05-retrieval.md) |
-| M06 | Baseline generation | Not started | - | - |
+| M06 | Baseline generation | Done | 2026-10-25 | [M06-baseline-generation.md](M06-baseline-generation.md) |
 | M07 | Eval harness and frozen baseline | Not started | - | - |
 | M08 | Corrective RAG | Not started | - | - |
 | M09 | Self-RAG | Not started | - | - |

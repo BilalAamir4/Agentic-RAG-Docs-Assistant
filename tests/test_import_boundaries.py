@@ -31,3 +31,24 @@ def test_import_boundaries_api_app() -> None:
             assert not mod.startswith(prefix), (
                 f"Boundary violation: importing ragdocs.api.app imported '{mod}'"
             )
+
+
+def test_import_boundaries_llm_module() -> None:
+    """Ensure ragdocs.providers.llm does not import langchain_google_genai at module level."""
+    script = (
+        "import json, sys\n"
+        "import ragdocs.providers.llm\n"
+        "print(json.dumps(sorted(list(sys.modules.keys()))))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    imported_modules: list[str] = json.loads(result.stdout)
+    assert "langchain_google_genai" not in imported_modules, (
+        "Boundary violation: importing ragdocs.providers.llm imported "
+        "langchain_google_genai at module level"
+    )

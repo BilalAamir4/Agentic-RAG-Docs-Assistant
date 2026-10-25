@@ -28,6 +28,12 @@ def test_settings_defaults_without_env(tmp_path: Path, monkeypatch: pytest.Monke
     assert settings.env == "local"
     assert settings.groq_api_key is None
     assert settings.google_api_key is None
+    assert settings.generator_model == "openai/gpt-oss-120b"
+    assert settings.grader_model == "openai/gpt-oss-20b"
+    assert settings.judge_model is None
+    assert settings.embedding_model == "gemini-embedding-001"
+    assert settings.rerank_model == "rerank-v3.5"
+    assert settings.use_reranker is False
     assert settings.embedding_dim == 768
     assert settings.dense_k == 20
     assert settings.bm25_k == 20

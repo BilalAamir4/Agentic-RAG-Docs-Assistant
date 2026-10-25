@@ -34,8 +34,8 @@ class Settings(BaseSettings):
 
     # Model identifiers (set in M04/M05/M06/M07 after verifying current IDs;
     # never hardcode elsewhere)
-    generator_model: str | None = None
-    grader_model: str | None = None
+    generator_model: str = "openai/gpt-oss-120b"
+    grader_model: str = "openai/gpt-oss-20b"
     judge_model: str | None = None
     embedding_model: str = "gemini-embedding-001"
     rerank_model: str = "rerank-v3.5"
