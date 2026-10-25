@@ -156,7 +156,63 @@ Known issues and limitations
 - Groq free tier TPM limit: General models have an 8,000 TPM limit on the free tier. While sufficient for single question queries (each consuming ~1,500 input + output tokens), large batch offline evaluation must be throttled or paced to avoid 429 errors.
 
 Open questions for the human
-- None. All 3 smoke test queries passed reliably with zero retries.
+1. Inline `[n]` citation markers in generated answer prose:
+   - In all three smoke test queries, the model populated the structured `cited: list[int]` field (e.g. `[1, 2, 4]` for `q001`), which were successfully resolved by `validate_answer` into formal `Citation` objects with `chunk_id` and `url`. However, inline bracket markers like `[1]` or `[2]` were absent from the generated answer prose.
+   - Raw `AnswerDraft` for `q001` before validation:
+     ```python
+     AnswerDraft(
+         answer=(
+             "Increase the recursion limit by passing a larger `recursion_limit` value in the config "
+             "dictionary when you call the graph. For example:\n"
+             "```python\n"
+             "# raise the step cap to 2000\n"
+             'result = graph.invoke({"input": "..."}, config={"recursion_limit": 2000})\n'
+             "```\n"
+             "The `recursion_limit` key is a top‑level config entry (not inside `configurable`) "
+             "and is applied at runtime to any graph invocation or streaming call. This overrides "
+             "the default limit (1000 steps as of v1.0.6) and prevents the `GRAPH_RECURSION_LIMIT` "
+             "error when the graph needs more super‑steps."
+         ),
+         cited=[1, 2, 4],
+         abstain=False,
+     )
+     ```
+   - Conclusion: Validation did NOT strip the citations (its `dropped_citations` diagnostic was 0). The model omitted inline bracket markers from the `answer` string, satisfying citation provenance solely through the structured `cited` integer array. Per prompt constraints, the shared answer prompt text has not been modified.
+
+2. Timing resolution and latency differences:
+   - Identical latency (1688 ms) for `q009` and `q043`:
+     In the original smoke run, `q009` and `q043` both reported 1688 ms. `t_ms` is computed using integer millisecond truncation `int((time.perf_counter() - start_time) * 1000)`. Both queries completed in ~1.688 seconds end-to-end, resulting in identical integer values by coincidence across network hops. Programmatic rerun without console prints confirms varying execution latencies (1959.6 ms for `q009` and 1280.1 ms for `q043`).
+   - Difference between `q001` latency_ms (1989 ms) and answer event t_ms (1994 ms):
+     In `BaselinePipeline.stream()`, `e_end_gen` was yielded at line 185 with timestamp 1989 ms. `scripts/ask.py` printed that event to the terminal. When control returned to the generator, `pipeline_result` was instantiated with `latency_ms = t_ms()` (1989 ms). Serializing `pipeline_result.model_dump()` across all retrieved chunks, chunks metadata, and events consumed 5 ms of CPU time. By the time `e_answer` was constructed with `t_ms()`, the clock reached 1994 ms.
+
+3. Step 1 Groq models and documentation verification:
+   - Official Groq Documentation URLs:
+     - Rate Limits: `https://console.groq.com/docs/rate-limits`
+     - Models: `https://console.groq.com/docs/models`
+   - Model `qwen/qwen3.8-27b`:
+     Confirmed present on Groq Cloud via `client.models.list()` (active, 131,072 context window) and documented at 30 RPM / 8K TPM. However, on the free tier, Groq enforces an Output Tokens Per Minute (OTPM) cap of 1,000 on `qwen/qwen3.8-27b`, causing HTTP 429 errors when requests request standard output limits.
+   - Structured-output models considered on Groq:
+     - `openai/gpt-oss-120b`: 120B general model, 30 RPM, 8K TPM, 131k context. Full structured output support via `json_schema`/tool calling. Selected as `generator_model`.
+     - `openai/gpt-oss-20b`: 20B general model, 30 RPM, 8K TPM, 131k context. Fastest general structured model (~0.88s latency). Selected as `grader_model`.
+     - `qwen/qwen3.8-27b`: 27B model, 30 RPM, 8K TPM, 131k context. Rejected due to 1,000 OTPM limit triggering 429 on free tier.
+     - `openai/gpt-oss-safeguard-20b`: Safeguard filter model, restricted to 3 RPM and 2K TPM.
+     - `meta-llama/llama-prompt-guard-2-22m` / `meta-llama/llama-prompt-guard-2-86m`: Moderation classifiers only.
+     - `allam-2-7b`: 7B Arabic-focused language model (4K context).
+     - `whisper-large-v3` / `whisper-large-v3-turbo`: Audio transcription models only.
+     - Note: `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` returned 404 (Model Not Found) on this account.
+
+4. Settings defaults confirmation:
+   - Defaults are set in `src/ragdocs/config.py` and asserted in `tests/test_config.py`:
+     - `generator_model: str = "openai/gpt-oss-120b"`
+     - `grader_model: str = "openai/gpt-oss-20b"`
+     - `judge_model: str | None = None`
+     - `use_reranker: bool = False` (per D6 gate)
+
+5. TPM headroom risk for evaluation runs:
+   - Free tier limit for Groq general models is 8,000 Tokens Per Minute (8K TPM) across the organization.
+   - A single RAG question consumes ~1,500 to 2,000 total tokens (system prompt + 5 retrieved documentation chunks + output answer).
+   - At 8,000 TPM, only 4 to 5 queries can be executed in any 60-second window before encountering HTTP 429 rate limit exceptions.
+   - Offline batch evaluation (M07 across 50 benchmark items) must enforce inter-query delays (e.g. 12–15 seconds minimum) or retry backoff to prevent quota exhaustion.
 
 Proposed follow-ups (out of scope)
 - [NOT DONE] Token streaming: Stream individual generation tokens from ChatGroq to TraceEvent when LangChain structured output token streaming stabilizes.
@@ -164,3 +220,4 @@ Proposed follow-ups (out of scope)
 Prerequisites for the next module
 - Baseline pipeline registered under "baseline" and verified.
 - Pipeline interface and runner ready for M07 evaluation harness.
+
