@@ -95,3 +95,39 @@
 - **Reason:** `text-embedding-004` was decommissioned by Google as of 2026-01-14; `gemini-embedding-001` is the current stable production model supporting Matryoshka dimension reduction to 768. Float16 format saves 50% memory footprint while maintaining numerical stability for runtime dot product search without torch or external vector database dependencies.
 - **Date:** 2026-10-22
 
+### D18 LangSmith Role
+- **Decision:** What LangSmith is used for and how tracing is configured across runs.
+- **Choice:** LangSmith provides tracing for local and eval runs. Each eval run is uploaded as a LangSmith experiment on dataset `ragdocs-eval-set-v1` by replaying stored results; committed run folders stay the source of truth. Every run of every pipeline uses the same tracing setting, recorded in `config.json`. RAGAS scoring runs with tracing off. Production tracing is off by default; enabling it requires a sampling rate of 0.1 or lower.
+- **Reason:** Traces help debugging and experiment comparison, but committed results must not depend on an external service, and the tracing setting must not vary between compared runs.
+- **Date:** 2026-11-15
+
+### D19 RAGAS Role
+- **Decision:** How RAGAS is used next to the custom judge.
+- **Choice:** RAGAS runs alongside the custom judge, with a split of duties:
+  - Deterministic metrics: retrieval hits, abstention, hallucination on unanswerables.
+  - Custom judge (audited): correctness 0 to 2 and answer-level citation support.
+  - RAGAS: faithfulness, response relevancy, context precision with reference, context recall.
+  - RAGAS scores answerable items only. Faithfulness and relevancy skip abstained answers. Every metric reports its n and a paired view.
+  - The RAGAS LLM is Gemini. RAGAS is a dev-only dependency behind a pip dry-run gate, with an isolated-venv fallback.
+  - Noise rule for continuous metrics: per paired item, a win or loss is a difference over 0.2; report "no measurable difference" unless wins minus losses is 3 or more.
+- **Reason:** Each metric family covers what it measures reliably; the noise rule prevents over-reading small differences on a 50-item set.
+- **Date:** 2026-11-15
+
+### D20 Citation Scoring
+- **Decision:** How citations are scored given that the model often omits inline [n] markers (see M06 open question 1).
+- **Choice:** The shared answer prompt stays unchanged. `citation_support` = 1 when every cited excerpt supports at least one claim in the answer and no central claim lacks a cited excerpt; 0 otherwise. The UI lists numbered Sources and renders [n] only when present.
+- **Reason:** Citations are carried by the structured `cited` list; scoring at answer level avoids depending on inline markers.
+- **Date:** 2026-11-15
+
+### D21 Module Order
+- **Decision:** Order of the remaining modules.
+- **Choice:** M07 tracing, M08 harness and judge, M09 RAGAS and experiments with tag `v1-baseline`, then M10 corrective, M11 self-RAG (tag `v2-agentic`), M12 API, M13 UI, M14 deploy, M15 write-up.
+- **Reason:** Tracing and evaluation are in place before the agentic pipelines, so their runs are traced and scored the same way as the baseline.
+- **Date:** 2026-11-15
+
+### D22 Context Metrics
+- **Decision:** How context-based metrics are labelled and compared across pipelines.
+- **Choice:** For corrective and self-RAG, contexts are the chunks the grader kept plus web results, so metrics computed on contexts (`context_hit@5`, `context_evidence_recall@5`, RAGAS context precision and recall) partly measure the grader's filtering. They are labelled "on contexts given to the generator". `first_retrieval_hit@5`, computed from each run's first retrieval event, is the like-for-like retrieval comparison across pipelines.
+- **Trace naming:** Pipeline parent runs are named after the pipeline, the LangGraph run inside them is named "graph", and retrieval runs are named "hybrid_retrieve", so no run nests under one with the same name.
+- **Reason:** Keeps retrieval comparisons fair across pipelines that filter contexts differently.
+- **Date:** 2026-11-15

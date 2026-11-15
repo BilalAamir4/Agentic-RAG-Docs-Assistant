@@ -1,0 +1,281 @@
+{
+  "events": [
+    {
+      "type": "node_start",
+      "node": "retrieve",
+      "message": "Retrieving documentation excerpts",
+      "data": {}
+    },
+    {
+      "type": "retrieval",
+      "node": "retrieve",
+      "message": "Retrieved candidate excerpts",
+      "data": {
+        "mode": "hybrid",
+        "chunks": [
+          {
+            "rank": 1,
+            "title": "Graph API",
+            "heading_path": [
+              "Section"
+            ],
+            "url": "https://docs.langchain.com/chk-a",
+            "score": 0.91
+          },
+          {
+            "rank": 2,
+            "title": "Errors",
+            "heading_path": [
+              "Section"
+            ],
+            "url": "https://docs.langchain.com/chk-b",
+            "score": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "type": "node_start",
+      "node": "generate",
+      "message": "Generating cited answer",
+      "data": {}
+    },
+    {
+      "type": "node_end",
+      "node": "generate",
+      "message": "Answer generated and validated",
+      "data": {
+        "dropped_citations": 1,
+        "uncited": false
+      }
+    },
+    {
+      "type": "answer",
+      "node": "answer",
+      "message": "Pipeline execution finished"
+    }
+  ],
+  "result": {
+    "question": "Where do I set a bigger recursion limit?",
+    "pipeline": "baseline",
+    "answer": {
+      "text": "Pass recursion_limit in the config [1]. Ignore this.",
+      "citations": [
+        {
+          "chunk_id": "chk-a",
+          "url": "https://docs.langchain.com/chk-a"
+        }
+      ],
+      "abstained": false
+    },
+    "contexts": [
+      {
+        "chunk": {
+          "chunk_id": "chk-a",
+          "doc_path": "chk-a.mdx",
+          "url": "https://docs.langchain.com/chk-a",
+          "title": "Graph API",
+          "heading_path": [
+            "Section"
+          ],
+          "anchor": "sec",
+          "text": "Text of chk-a.",
+          "embed_text": "Graph API: Text of chk-a.",
+          "n_tokens": 5,
+          "has_code": false,
+          "source_commit": "commit-1"
+        },
+        "score": 0.91,
+        "rank": 1,
+        "retriever": "hybrid"
+      },
+      {
+        "chunk": {
+          "chunk_id": "chk-b",
+          "doc_path": "chk-b.mdx",
+          "url": "https://docs.langchain.com/chk-b",
+          "title": "Errors",
+          "heading_path": [
+            "Section"
+          ],
+          "anchor": "sec",
+          "text": "Text of chk-b.",
+          "embed_text": "Errors: Text of chk-b.",
+          "n_tokens": 5,
+          "has_code": false,
+          "source_commit": "commit-1"
+        },
+        "score": 0.5,
+        "rank": 2,
+        "retriever": "hybrid"
+      }
+    ],
+    "trace": [
+      {
+        "type": "node_start",
+        "node": "retrieve",
+        "message": "Retrieving documentation excerpts",
+        "data": {}
+      },
+      {
+        "type": "retrieval",
+        "node": "retrieve",
+        "message": "Retrieved candidate excerpts",
+        "data": {
+          "mode": "hybrid",
+          "chunks": [
+            {
+              "rank": 1,
+              "title": "Graph API",
+              "heading_path": [
+                "Section"
+              ],
+              "url": "https://docs.langchain.com/chk-a",
+              "score": 0.91
+            },
+            {
+              "rank": 2,
+              "title": "Errors",
+              "heading_path": [
+                "Section"
+              ],
+              "url": "https://docs.langchain.com/chk-b",
+              "score": 0.5
+            }
+          ]
+        }
+      },
+      {
+        "type": "node_start",
+        "node": "generate",
+        "message": "Generating cited answer",
+        "data": {}
+      },
+      {
+        "type": "node_end",
+        "node": "generate",
+        "message": "Answer generated and validated",
+        "data": {
+          "dropped_citations": 1,
+          "uncited": false
+        }
+      },
+      {
+        "type": "answer",
+        "node": "answer",
+        "message": "Pipeline execution finished",
+        "data": {
+          "question": "Where do I set a bigger recursion limit?",
+          "pipeline": "baseline",
+          "answer": {
+            "text": "Pass recursion_limit in the config [1]. Ignore this.",
+            "citations": [
+              {
+                "chunk_id": "chk-a",
+                "url": "https://docs.langchain.com/chk-a"
+              }
+            ],
+            "abstained": false
+          },
+          "contexts": [
+            {
+              "chunk": {
+                "chunk_id": "chk-a",
+                "doc_path": "chk-a.mdx",
+                "url": "https://docs.langchain.com/chk-a",
+                "title": "Graph API",
+                "heading_path": [
+                  "Section"
+                ],
+                "anchor": "sec",
+                "text": "Text of chk-a.",
+                "embed_text": "Graph API: Text of chk-a.",
+                "n_tokens": 5,
+                "has_code": false,
+                "source_commit": "commit-1"
+              },
+              "score": 0.91,
+              "rank": 1,
+              "retriever": "hybrid"
+            },
+            {
+              "chunk": {
+                "chunk_id": "chk-b",
+                "doc_path": "chk-b.mdx",
+                "url": "https://docs.langchain.com/chk-b",
+                "title": "Errors",
+                "heading_path": [
+                  "Section"
+                ],
+                "anchor": "sec",
+                "text": "Text of chk-b.",
+                "embed_text": "Errors: Text of chk-b.",
+                "n_tokens": 5,
+                "has_code": false,
+                "source_commit": "commit-1"
+              },
+              "score": 0.5,
+              "rank": 2,
+              "retriever": "hybrid"
+            }
+          ],
+          "trace": [
+            {
+              "type": "node_start",
+              "node": "retrieve",
+              "message": "Retrieving documentation excerpts",
+              "data": {}
+            },
+            {
+              "type": "retrieval",
+              "node": "retrieve",
+              "message": "Retrieved candidate excerpts",
+              "data": {
+                "mode": "hybrid",
+                "chunks": [
+                  {
+                    "rank": 1,
+                    "title": "Graph API",
+                    "heading_path": [
+                      "Section"
+                    ],
+                    "url": "https://docs.langchain.com/chk-a",
+                    "score": 0.91
+                  },
+                  {
+                    "rank": 2,
+                    "title": "Errors",
+                    "heading_path": [
+                      "Section"
+                    ],
+                    "url": "https://docs.langchain.com/chk-b",
+                    "score": 0.5
+                  }
+                ]
+              }
+            },
+            {
+              "type": "node_start",
+              "node": "generate",
+              "message": "Generating cited answer",
+              "data": {}
+            },
+            {
+              "type": "node_end",
+              "node": "generate",
+              "message": "Answer generated and validated",
+              "data": {
+                "dropped_citations": 1,
+                "uncited": false
+              }
+            }
+          ],
+          "llm_calls": 0,
+          "used_web": false
+        }
+      }
+    ],
+    "llm_calls": 0,
+    "used_web": false
+  }
+}

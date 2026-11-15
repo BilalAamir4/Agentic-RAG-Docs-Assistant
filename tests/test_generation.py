@@ -58,8 +58,9 @@ class StubStructuredLLM:
         self.draft = draft
         self.invoked_with: Any = None
 
-    def invoke(self, messages: Any, **kwargs: Any) -> AnswerDraft:
+    def invoke(self, messages: Any, config: dict[str, Any] | None = None) -> AnswerDraft:
         self.invoked_with = messages
+        self.config = config
         return self.draft
 
 

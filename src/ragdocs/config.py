@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     upstash_redis_rest_url: SecretStr | None = None
     upstash_redis_rest_token: SecretStr | None = None
 
+    # LangSmith tracing (M07). Field names match the env vars read by langsmith 0.14.7
+    # (langsmith/utils.py get_env_var). ragdocs.tracing.configure_tracing exports them.
+    langsmith_api_key: SecretStr | None = None
+    langsmith_tracing: bool = False
+    langsmith_project: str = "ragdocs-local"
+    langsmith_endpoint: str | None = None
+    langsmith_sampling_rate: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        validation_alias=AliasChoices("LANGSMITH_TRACING_SAMPLING_RATE", "langsmith_sampling_rate"),
+    )
+
     # Model identifiers (set in M04/M05/M06/M07 after verifying current IDs;
     # never hardcode elsewhere)
     generator_model: str = "openai/gpt-oss-120b"

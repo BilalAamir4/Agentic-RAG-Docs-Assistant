@@ -19,7 +19,8 @@ from ragdocs.generation.prompts import (
 )
 from ragdocs.pipelines.base import Pipeline, safe_error_message
 from ragdocs.providers.llm import CallCounter
-from ragdocs.schemas import PipelineResult, RetrievedChunk, TraceEvent
+from ragdocs.schemas import Answer, PipelineResult, RetrievedChunk, TraceEvent
+from ragdocs.tracing import TracedRun, traced_run
 
 
 class BaselinePipeline(Pipeline):
@@ -81,7 +82,9 @@ class BaselinePipeline(Pipeline):
             "diagnostics": diagnostics,
         }
 
-    def stream(self, question: str) -> Iterator[TraceEvent]:
+    def stream(
+        self, question: str, run_metadata: dict[str, Any] | None = None
+    ) -> Iterator[TraceEvent]:
         """Execute baseline pipeline and stream progress TraceEvents.
 
         Yields:
@@ -91,7 +94,58 @@ class BaselinePipeline(Pipeline):
             4. node_end 'generate' with validation diagnostics
             5. answer event with PipelineResult data dump
             Or on error: one error event with safe message, then stops.
+
+        When LangSmith tracing is enabled the run is recorded as one trace: a parent run
+        named after the pipeline with 'hybrid_retrieve' and 'generate' children.
+        run_metadata is added to the parent run and generate run metadata; it never
+        changes the yielded events.
         """
+        metadata = {"pipeline": self.name, **(run_metadata or {})}
+        with traced_run(
+            name=self.name,
+            run_type="chain",
+            inputs={"question": question},
+            metadata=metadata,
+        ) as parent:
+            yield from self._stream_events(question, metadata, parent)
+
+    def _retrieve_traced(self, question: str) -> list[Any]:
+        """Retrieve chunks inside a 'hybrid_retrieve' retriever run."""
+        with traced_run(
+            name="hybrid_retrieve", run_type="retriever", inputs={"query": question}
+        ) as run:
+            mode = getattr(self.retriever, "mode", None)
+            if mode:
+                chunks = self.retriever.retrieve(question, mode=mode)
+            else:
+                chunks = self.retriever.retrieve(question)
+            run.set_outputs({"documents": [_as_trace_document(c) for c in chunks]})
+        return chunks
+
+    def _generate(
+        self, question: str, chunks: list[Any], metadata: dict[str, Any]
+    ) -> tuple[Answer, dict[str, Any], int]:
+        """Invoke the structured LLM as run 'generate' and validate its draft.
+
+        Returns the validated answer, diagnostics and the counted LLM calls.
+        """
+        counter = CallCounter()
+        context = format_context(chunks)
+        messages = [
+            SystemMessage(content=ANSWER_SYSTEM_PROMPT),
+            HumanMessage(content=ANSWER_USER_TEMPLATE.format(question=question, context=context)),
+        ]
+        draft = self.structured_llm.invoke(
+            messages,
+            config={"callbacks": [counter], "run_name": "generate", "metadata": metadata},
+        )
+        answer, diagnostics = validate_answer(draft, chunks)
+        return answer, diagnostics, counter.llm_calls
+
+    def _stream_events(
+        self, question: str, metadata: dict[str, Any], parent: TracedRun
+    ) -> Iterator[TraceEvent]:
+        """Yield the baseline TraceEvents in the order documented on stream()."""
         start_time = time.perf_counter()
 
         def t_ms() -> int:
@@ -99,122 +153,93 @@ class BaselinePipeline(Pipeline):
 
         trace: list[TraceEvent] = []
 
+        def emit(event_type: Any, node: str, message: str, data: Any = None) -> TraceEvent:
+            event = TraceEvent(
+                type=event_type, node=node, message=message, data=data or {}, t_ms=t_ms()
+            )
+            trace.append(event)
+            return event
+
         try:
-            # 1. node_start "retrieve"
-            e_start_retrieve = TraceEvent(
-                type="node_start",
-                node="retrieve",
-                message="Retrieving documentation excerpts",
-                t_ms=t_ms(),
-            )
-            trace.append(e_start_retrieve)
-            yield e_start_retrieve
-
-            # Retrieve candidate excerpts
+            yield emit("node_start", "retrieve", "Retrieving documentation excerpts")
             mode = getattr(self.retriever, "mode", None)
-            if mode:
-                chunks = self.retriever.retrieve(question, mode=mode)
-            else:
-                chunks = self.retriever.retrieve(question)
-
+            chunks = self._retrieve_traced(question)
             retrieval_mode = getattr(self.retriever, "mode", "hybrid") if mode is None else mode
-            chunks_summary = []
-            for c in chunks:
-                chunk_obj = c.chunk if isinstance(c, RetrievedChunk) else c
-                score = c.score if isinstance(c, RetrievedChunk) else 0.0
-                rank = c.rank if isinstance(c, RetrievedChunk) else 0
-                chunks_summary.append(
-                    {
-                        "rank": rank,
-                        "title": chunk_obj.title,
-                        "heading_path": chunk_obj.heading_path,
-                        "url": chunk_obj.url,
-                        "score": score,
-                    }
-                )
-
-            # 2. retrieval event
-            e_retrieval = TraceEvent(
-                type="retrieval",
-                node="retrieve",
-                message="Retrieved candidate excerpts",
-                data={"mode": retrieval_mode, "chunks": chunks_summary},
-                t_ms=t_ms(),
+            yield emit(
+                "retrieval",
+                "retrieve",
+                "Retrieved candidate excerpts",
+                {"mode": retrieval_mode, "chunks": [_chunk_summary(c) for c in chunks]},
             )
-            trace.append(e_retrieval)
-            yield e_retrieval
+            yield emit("node_start", "generate", "Generating cited answer")
+            answer, diagnostics, llm_calls = self._generate(question, chunks, metadata)
+            yield emit("node_end", "generate", "Answer generated and validated", diagnostics)
 
-            # 3. node_start "generate"
-            e_start_gen = TraceEvent(
-                type="node_start",
-                node="generate",
-                message="Generating cited answer",
-                t_ms=t_ms(),
-            )
-            trace.append(e_start_gen)
-            yield e_start_gen
-
-            # Invoke generation with CallCounter
-            counter = CallCounter()
-            context = format_context(chunks)
-            messages = [
-                SystemMessage(content=ANSWER_SYSTEM_PROMPT),
-                HumanMessage(
-                    content=ANSWER_USER_TEMPLATE.format(question=question, context=context)
-                ),
-            ]
-
-            # Pass config callbacks to structured_llm if supported
-            try:
-                draft = self.structured_llm.invoke(messages, config={"callbacks": [counter]})
-            except TypeError:
-                # Stub or protocol implementation without config keyword
-                draft = self.structured_llm.invoke(messages)
-
-            answer, diagnostics = validate_answer(draft, chunks)
-
-            # 4. node_end "generate"
-            e_end_gen = TraceEvent(
-                type="node_end",
-                node="generate",
-                message="Answer generated and validated",
-                data=diagnostics,
-                t_ms=t_ms(),
-            )
-            trace.append(e_end_gen)
-            yield e_end_gen
-
-            # 5. answer event
             pipeline_result = PipelineResult(
                 question=question,
                 pipeline=self.name,
                 answer=answer,
                 contexts=chunks,
                 trace=trace,
-                llm_calls=counter.llm_calls,
+                llm_calls=llm_calls,
                 latency_ms=t_ms(),
                 used_web=False,
             )
-
-            e_answer = TraceEvent(
-                type="answer",
-                node="answer",
-                message="Pipeline execution finished",
-                data=pipeline_result.model_dump(),
-                t_ms=t_ms(),
+            e_answer = emit(
+                "answer", "answer", "Pipeline execution finished", pipeline_result.model_dump()
             )
-            trace.append(e_answer)
             # Ensure full trace including e_answer is in final data dump
             pipeline_result.trace = trace
             e_answer.data = pipeline_result.model_dump()
+            parent.set_outputs(_parent_outputs(pipeline_result))
             yield e_answer
 
         except Exception as exc:
-            e_err = TraceEvent(
-                type="error",
-                node="error",
-                message=safe_error_message(exc),
-                t_ms=t_ms(),
-            )
-            trace.append(e_err)
+            e_err = emit("error", "error", safe_error_message(exc))
+            parent.set_error(e_err.message)
             yield e_err
+
+
+def _parent_outputs(result: PipelineResult) -> dict[str, Any]:
+    """Summarise a PipelineResult as the outputs of the pipeline parent run."""
+    return {
+        "answer": result.answer.text,
+        "abstained": result.answer.abstained,
+        "n_citations": len(result.answer.citations),
+        "llm_calls": result.llm_calls,
+        "latency_ms": result.latency_ms,
+    }
+
+
+def _rank_and_score(c: Any) -> tuple[Any, int, float]:
+    """Return (chunk, rank, score) for a RetrievedChunk or a bare Chunk."""
+    if isinstance(c, RetrievedChunk):
+        return c.chunk, c.rank, c.score
+    return c, 0, 0.0
+
+
+def _chunk_summary(c: Any) -> dict[str, Any]:
+    """Summarise a retrieved chunk for the retrieval TraceEvent."""
+    chunk_obj, rank, score = _rank_and_score(c)
+    return {
+        "rank": rank,
+        "title": chunk_obj.title,
+        "heading_path": chunk_obj.heading_path,
+        "url": chunk_obj.url,
+        "score": score,
+    }
+
+
+def _as_trace_document(c: Any) -> dict[str, Any]:
+    """Format a chunk in the document shape LangSmith renders for retriever runs."""
+    chunk_obj, rank, score = _rank_and_score(c)
+    return {
+        "page_content": chunk_obj.text,
+        "type": "Document",
+        "metadata": {
+            "chunk_id": chunk_obj.chunk_id,
+            "url": chunk_obj.url,
+            "rank": rank,
+            "score": score,
+        },
+    }

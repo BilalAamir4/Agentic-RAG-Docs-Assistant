@@ -11,10 +11,12 @@ Index of implementation modules and their delivery tracking status.
 | M04 | Index build | Done | 2026-10-22 | [M04-index.md](M04-index.md) |
 | M05 | Hybrid retrieval and reranking | Done | 2026-10-25 | [M05-retrieval.md](M05-retrieval.md) |
 | M06 | Baseline generation | Done | 2026-10-25 | [M06-baseline-generation.md](M06-baseline-generation.md) |
-| M07 | Eval harness and frozen baseline | Not started | - | - |
-| M08 | Corrective RAG | Not started | - | - |
-| M09 | Self-RAG | Not started | - | - |
-| M10 | API | Not started | - | - |
-| M11 | Trace UI | Not started | - | - |
-| M12 | Production deploy | Not started | - | - |
-| M13 | Results and write-up | Not started | - | - |
+| M07 | LangSmith tracing and plan sync | Done | 2026-11-15 | [M07-langsmith-tracing.md](M07-langsmith-tracing.md) |
+| M08 | Eval harness, custom judge, baseline run | Not started | - | - |
+| M09 | RAGAS, LangSmith experiments, baseline freeze | Not started | - | - |
+| M10 | Corrective RAG | Not started | - | - |
+| M11 | Self-RAG | Not started | - | - |
+| M12 | Streaming API | Not started | - | - |
+| M13 | Trace UI | Not started | - | - |
+| M14 | Production deploy | Not started | - | - |
+| M15 | Results and write-up | Not started | - | - |

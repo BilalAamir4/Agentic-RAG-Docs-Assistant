@@ -7,8 +7,10 @@ Usage:
 import argparse
 import sys
 
+from ragdocs.config import get_settings
 from ragdocs.pipelines.registry import get_pipeline
 from ragdocs.schemas import PipelineResult, TraceEvent
+from ragdocs.tracing import configure_tracing, flush_traces, last_trace_url
 
 
 def format_event_line(event: TraceEvent) -> str:
@@ -46,13 +48,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    pipeline = get_pipeline(args.pipeline)
-    print(f"Executing pipeline '{pipeline.name}' on question: {args.question!r}\n")
+    tracing_active = configure_tracing(get_settings())
+    try:
+        exit_code = _ask(args.pipeline, args.question)
+    finally:
+        flush_traces()
+    if tracing_active:
+        url = last_trace_url()
+        print(f"\nLangSmith trace: {url}" if url else "\nLangSmith trace: none recorded")
+    if exit_code:
+        sys.exit(exit_code)
+
+
+def _ask(pipeline_name: str, question: str) -> int:
+    """Stream one pipeline run, print events and results, and return an exit code."""
+    pipeline = get_pipeline(pipeline_name)
+    print(f"Executing pipeline '{pipeline.name}' on question: {question!r}\n")
 
     final_result: PipelineResult | None = None
     has_error = False
 
-    for event in pipeline.stream(args.question):
+    for event in pipeline.stream(question):
         print(format_event_line(event))
         if event.type == "answer":
             final_result = PipelineResult.model_validate(event.data)
@@ -61,7 +77,7 @@ def main() -> None:
 
     if has_error or final_result is None:
         print("\nPipeline failed or terminated without producing an answer.")
-        sys.exit(1)
+        return 1
 
     print("\n--- Answer ---")
     print(final_result.answer.text)
@@ -74,6 +90,7 @@ def main() -> None:
 
     print(f"\nLLM calls: {final_result.llm_calls}")
     print(f"Latency: {final_result.latency_ms} ms")
+    return 0
 
 
 if __name__ == "__main__":

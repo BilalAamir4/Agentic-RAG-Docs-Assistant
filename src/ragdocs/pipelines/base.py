@@ -1,7 +1,7 @@
 """Base pipeline interface, execution runner, and trace protocols."""
 
 from collections.abc import Iterator
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ragdocs.schemas import PipelineResult, TraceEvent
 
@@ -37,8 +37,13 @@ class Pipeline(Protocol):
 
     name: str
 
-    def stream(self, question: str) -> Iterator[TraceEvent]:
+    def stream(
+        self, question: str, run_metadata: dict[str, Any] | None = None
+    ) -> Iterator[TraceEvent]:
         """Execute pipeline and stream TraceEvent instances.
+
+        run_metadata is attached to the LangSmith trace when tracing is enabled and
+        must not change the yielded events.
 
         The final event must have type='answer' and data=PipelineResult.model_dump().
         On any exception, yields one type='error' event with a safe message and stops.
