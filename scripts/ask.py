@@ -8,6 +8,7 @@ import argparse
 import sys
 
 from ragdocs.config import get_settings
+from ragdocs.eval.budget_recorder import install_budget_recorder
 from ragdocs.pipelines.registry import get_pipeline
 from ragdocs.schemas import PipelineResult, TraceEvent
 from ragdocs.tracing import configure_tracing, flush_traces, last_trace_url
@@ -48,7 +49,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    tracing_active = configure_tracing(get_settings())
+    settings = get_settings()
+    install_budget_recorder(settings)
+    tracing_active = configure_tracing(settings)
     try:
         exit_code = _ask(args.pipeline, args.question)
     finally:

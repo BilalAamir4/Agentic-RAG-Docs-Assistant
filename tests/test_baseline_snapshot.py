@@ -97,3 +97,28 @@ def test_baseline_stream_matches_snapshot() -> None:
 if __name__ == "__main__" and "--write" in sys.argv:
     write_text(SNAPSHOT_PATH, json.dumps(build_snapshot(), indent=2, ensure_ascii=False) + "\n")
     print(f"Wrote {SNAPSHOT_PATH}")
+
+
+class _ConfigRecordingLLM(_SnapshotLLM):
+    """Snapshot stub that records the config passed to invoke."""
+
+    def __init__(self) -> None:
+        self.configs: list[dict[str, Any]] = []
+
+    def invoke(self, messages: Any, config: dict[str, Any] | None = None) -> AnswerDraft:
+        """Record config, then return the fixed draft."""
+        self.configs.append(config or {})
+        return super().invoke(messages, config)
+
+
+def test_extra_callbacks_appended_after_counter() -> None:
+    """callbacks= adds handlers after the CallCounter and leaves the events unchanged."""
+    from ragdocs.providers.llm import CallCounter
+
+    llm = _ConfigRecordingLLM()
+    marker = object()
+    pipeline = BaselinePipeline(retriever=_SnapshotRetriever(), structured_llm=llm)
+    events = list(pipeline.stream(QUESTION, callbacks=[marker]))
+    callbacks = llm.configs[0]["callbacks"]
+    assert isinstance(callbacks[0], CallCounter) and callbacks[1] is marker
+    assert [e.type for e in events] == [e["type"] for e in build_snapshot()["events"]]

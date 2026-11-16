@@ -38,6 +38,37 @@
 - **Decision:** LLM providers for generation, grading, and offline judge.
 - **Choice:** Groq for generation and grading; Gemini Flash as eval judge (different model family). Model IDs live only in config.
 - **Reason:** Fast inference on Groq for interactive latency and model family diversity for unbiased evaluation.
+- **Update (M08, 2026-11-16): judge model chosen by free-tier budget.** Free-tier limits are not published in readable form (https://aistudio.google.com/docs/rate-limits says limits "can be viewed in Google AI Studio"; https://console.groq.com/docs/rate-limits shows Developer-plan base limits), so values come from the human's AI Studio project page and Groq org limits page (Free plan), read on 2026-11-15:
+  - gemini-3.6-flash 5 RPM / 250K TPM / 20 RPD; gemini-2.5-flash-lite 10 / 250K / 20; gemini-3.1-flash-lite 15 / 250K / 500; gemini-3.5-flash-lite 15 / 250K / 500.
+  - Groq openai/gpt-oss-120b, openai/gpt-oss-20b and qwen/qwen3.8-27b: 30 RPM / 1K RPD / 8K TPM / 200K TPD. llama-3.3-70b-versatile is not on the org's limits page (treated as unavailable).
+  - Rule (human): first model that supports with_structured_output, is not an OpenAI gpt-oss model, and has RPD of at least 500 (one pipeline's judge plus RAGAS in about one day). gemini-3.1-flash-lite and gemini-3.5-flash-lite both qualify; the human chose **gemini-3.5-flash-lite** (newer, same limits). structured_output True in langchain-google-genai 4.4.1 data/_profiles.py; one live with_structured_output call succeeded on 2026-11-15 with usage_metadata present.
+  - gemini-3.6-flash was rejected: 20 RPD means up to 3 days for 42 judge calls, and RAGAS (about 400 calls per pipeline) would take about 20 days.
+  - M09 uses gemini-3.1-flash-lite as ragas_llm_model with its own 15 RPM / 500 RPD budget (AI Studio limits are per model).
+  - Settings: judge_model = gemini-3.5-flash-lite, judge_rpm_limit = 15, judge_rpd_limit = 500, judge_tpm_limit = 250000, judge_quota_timezone = America/Los_Angeles (Google resets RPD at midnight Pacific).
+- **Update (M08, 2026-11-16): Groq daily token budget.** Free plan caps each gpt-oss model at 200K tokens per day; 50 items at the 3,000-token starting estimate is about 150K. Settings.groq_tpd_limit = 200000 for openai/gpt-oss-120b and openai/gpt-oss-20b; RollingBudget enforces tokens_per_day next to requests_per_day, both persisted per model in cache/budget.json, and raises DailyLimitReached (exit code 3) when either daily limit would be exceeded. Groq's daily reset time is not documented on the pages read; the budget assumes UTC midnight.
+
+- **Update (M08, 2026-11-16): Groq daily limits as a draining bucket, and budget recording (human decisions).**
+  - Groq's daily limits are not a UTC calendar day. Evidence: the rerun results/runs/baseline-20261116-1050 got ten 429 "tokens per day (TPD): Limit 200000" responses (its failed_attempts.jsonl). Each retry-after equals (Used + Requested - 200,000) / (200,000 / 86,400 s) to 0.1 s:
+
+    | UTC | Used | Requested | Over | Formula | Groq retry-after |
+    |---|---|---|---|---|---|
+    | 11:01:26 | 197,585 | 2,562 | 147 | 63.5 s | 1m3.504s |
+    | 11:01:27 | 197,584 | 2,562 | 146 | 63.1 s | 1m3.072s |
+    | 11:01:30 | 197,576 | 2,897 | 473 | 204.3 s | 3m24.336s |
+    | 11:01:31 | 197,575 | 2,897 | 472 | 203.9 s | 3m23.904s |
+    | 11:03:34 | 199,850 | 2,259 | 2,109 | 911.1 s | 15m11.088s |
+    | 11:03:35 | 199,847 | 3,370 | 3,217 | 1,389.7 s | 23m9.744s |
+    | 11:03:38 | 199,840 | 2,259 | 2,099 | 906.8 s | 15m6.768s |
+    | 11:03:38 | 199,839 | 2,259 | 2,098 | 906.3 s | 15m6.336s |
+    | 11:03:42 | 199,832 | 2,259 | 2,091 | 903.3 s | 15m3.312s |
+    | 11:03:42 | 199,831 | 2,259 | 2,090 | 902.9 s | 15m2.880s |
+
+  - Choice (human): model each Groq daily limit as a bucket. Balance = recorded usage drained at limit / 86,400 s (tokens 200,000 / 86,400 = 2.315/s; requests 1,000 / 86,400 = 0.0116/s); available = limit x 0.9 (throttle_safety) - balance. Settings.groq_quota_window = "token_bucket". The balance is computed from the per-call events in cache/budget.json ({"version": 2, "events": {model: [[t, requests, tokens]]}}, 2-day retention). Gemini models keep the calendar day in America/Los_Angeles. "rolling_24h" remains available as the fallback.
+  - Backstop (human): on any 429 the eval runner waits for the provider's retry-after (default 60 s when none is given; pause with exit code 3 if longer than 1,800 s or after 3 waits per item). A per-day 429 while the model predicted room is a model miss, logged in cache/budget_model_misses.jsonl and copied to the tracking file. At 2 misses the run pauses; the human rule is then to revert groq_quota_window to "rolling_24h" and report.
+  - Gemini Embedding 1 limits (AI Studio, 1 Day view, 2026-11-16): 100 RPM, 30K TPM, 1K RPD (Settings.embedding_*). Embedding tokens are estimated as characters / 4; the API reports none.
+  - Every live Groq or Gemini call is recorded: ragdocs.eval.budget_recorder.install_budget_recorder registers a BudgetRecorder through langchain_core's register_configure_hook (every chat-model call in the process; failed calls as one request with 0 tokens) and as a usage listener that GeminiEmbedder notifies on every API attempt. Installed by the eval and judge runners, scripts/ask.py, build_index.py, eval_retrieval.py, structured_output_check.py, and every test marked live (tests/conftest.py). Cohere rerank is not recorded: use_reranker is False, so nothing calls it.
+  - `py tasks.py budget [--need MODEL=TOKENS[:REQUESTS]]` prints each model's balance or window usage, free, and free at 0.9; with --need it exits 1 and prints when the need fits. Rule (human, also in AGENTS.md): run it before any live run or check and stop if the need does not fit.
+  - cache/budget.json for 2026-11-16 was rebuilt from evidence (per-item UUIDv7 run-id times, failed_attempts.jsonl, the structured-output check file, judge_v1.jsonl mtime), plus one reconciliation event of 18,730 tokens at 11:01:26Z so the gpt-oss-120b bucket balance equals Groq's reported Used 197,585 at that time (unlogged failed calls and earlier usage).
 
 ### D8 Web Search Fallback
 - **Decision:** Web search tool for corrective retrieval.
@@ -48,6 +79,9 @@
 - **Decision:** Evaluation metrics and judge design.
 - **Choice:** Custom evaluation: deterministic retrieval metrics plus a rubric LLM judge, audited by hand on 10 items.
 - **Reason:** Balances reproducible retrieval metrics with nuanced semantic accuracy evaluation.
+- **Update (M08, 2026-11-16): judging decoupled from generation.** `py tasks.py eval --pipeline NAME` generates answers and computes deterministic scores only and never calls the judge (verdict is None in per_question.jsonl). `py tasks.py judge --run-dir DIR` scores the stored answers and writes judge_v<N>.jsonl ({id, verdict, judge_model, judge_prompt_version, usage, cached}) with N = Settings.judge_prompt_version; it is resumable and exits with code 3 at the judge's daily cap. The same command is the re-judge path after a prompt version bump. report.py, compare_runs, judge_audit, the M09 experiment upload and every later reader take each item's verdict from the highest judge_v<N>.jsonl present (else per_question.jsonl) and record that effective version. Reason: Groq generation never waits on judge quota, and re-judging never regenerates answers.
+- **Judge (M08):** one call per answerable, non-abstained item returns JudgeVerdict(correctness 0/1/2, citation_support 0/1, rationale of at most 60 words). JUDGE_PROMPT is in src/ragdocs/eval/prompts.py; judge_prompt_version = 1.
+- **Audit gate (M08):** correctness agreement of at least 8/10 and citation_support agreement of at least 8/10 on 10 items (seed 21; 6 single, 2 multi, 2 version). Result: pending human audit.
 
 ### D10 Rate Limiting
 - **Decision:** Protection against API abuse and cost overruns.
@@ -131,3 +165,15 @@
 - **Trace naming:** Pipeline parent runs are named after the pipeline, the LangGraph run inside them is named "graph", and retrieval runs are named "hybrid_retrieve", so no run nests under one with the same name.
 - **Reason:** Keeps retrieval comparisons fair across pipelines that filter contexts differently.
 - **Date:** 2026-11-15
+
+### D23 Structured Output Method for Groq Calls
+- **Decision:** How Groq gpt-oss calls request structured output (AnswerDraft now; the M10/M11 grader calls later).
+- **Choice:** `with_structured_output(schema, method="json_schema", strict=True)` (Settings.structured_output_method = "json_schema", structured_output_strict = True), replacing the default `method="function_calling"`. The M10 and M11 grader calls on openai/gpt-oss-20b must use the same method through the same settings. The answer prompt text is unchanged.
+- **Evidence:**
+  - Groq: strict json_schema (constrained decoding) is supported for openai/gpt-oss-20b and openai/gpt-oss-120b (https://console.groq.com/docs/structured-outputs). langchain-groq 1.1.3 `with_structured_output` passes `response_format={"type": "json_schema", "json_schema": {..., "strict": true}}` only for models in `_STRICT_STRUCTURED_OUTPUT_MODELS` (both gpt-oss models) and parses with PydanticOutputParser. `convert_to_json_schema(AnswerDraft, strict=True)` lists all three fields as required with `additionalProperties: false`.
+  - Before: the first baseline run (results/runs/baseline-20261116-0919, function_calling) paused 3 times on Groq `400 tool_use_failed` (wrong tool name `answer_draft` or `json`, or no tool call); at least 6 failed calls over 50 items.
+  - Same-input comparison (scripts/structured_output_check.py, results/structured_output_check-20261116.json, 2026-11-16): 10 eval questions (q015, q028, q001 to q008), same retrieved contexts and messages, one call per method, alternating order. function_calling 2/10 failed (q002 "Failed to parse tool call arguments as JSON"; q008 tool `answerDraft`); json_schema strict 0/10 failed. On the 8 questions where both succeeded, abstain matched 8/8 and cited lists matched 7/8 (q007 [1, 4, 5] vs [1, 4]). Tokens per successful call were about 8% higher with json_schema.
+  - The sample is small (10 calls per method); the decision also rests on the mechanism: constrained decoding produces schema-valid JSON and has no tool name to get wrong.
+- **Measurement:** every eval run records `structured_output_failures` per item (failed attempts before success, from <run>/failed_attempts.jsonl, so counts survive pauses) and `rate_limited_attempts` (attempts that failed with RateLimitError, counted separately), and summary.md reports both.
+- **Reason:** The function-calling failures surface to users as error events, and the eval had been scoring only the attempt that succeeded, which hid the failure rate.
+- **Date:** 2026-11-16

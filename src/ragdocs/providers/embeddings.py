@@ -14,9 +14,11 @@ from tenacity import (
 )
 
 from ragdocs.config import Settings, get_settings
+from ragdocs.providers.usage import notify_usage
 
 MAX_BATCH_SIZE = 100
 MAX_BATCH_TOKENS = 20_000
+CHARS_PER_TOKEN = 4
 TASK_TYPE_DOCUMENT = "RETRIEVAL_DOCUMENT"
 TASK_TYPE_QUERY = "RETRIEVAL_QUERY"
 
@@ -34,6 +36,12 @@ def _on_retry_exhausted(retry_state: RetryCallState) -> Any:
     raise RuntimeError(
         f"Gemini embeddings API call failed after {retry_state.attempt_number} attempts: {exc}"
     ) from exc
+
+
+def estimate_embed_tokens(contents: str | list[str]) -> int:
+    """Estimate input tokens as characters / CHARS_PER_TOKEN (the API reports no usage)."""
+    texts = [contents] if isinstance(contents, str) else contents
+    return sum(max(1, len(t) // CHARS_PER_TOKEN) for t in texts)
 
 
 def _normalize_l2(vectors: np.ndarray) -> np.ndarray:
@@ -94,6 +102,7 @@ class GeminiEmbedder:
             output_dimensionality=self.dim,
         )
         self.api_calls += 1
+        notify_usage(self.model, 1, estimate_embed_tokens(contents))
         response = self.client.models.embed_content(
             model=self.model,
             contents=contents,
@@ -120,7 +129,7 @@ class GeminiEmbedder:
         current_batch: list[str] = []
         current_tokens = 0
         for t in texts:
-            est_tokens = max(1, len(t) // 4)
+            est_tokens = max(1, len(t) // CHARS_PER_TOKEN)
             if current_batch and (
                 len(current_batch) >= MAX_BATCH_SIZE
                 or current_tokens + est_tokens > MAX_BATCH_TOKENS

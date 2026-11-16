@@ -114,3 +114,111 @@ class PipelineResult(BaseModel):
     llm_calls: int
     latency_ms: int
     used_web: bool = False
+
+
+# Evaluation records (M08). Written by ragdocs.eval.runner, read by report, compare and
+# the judge. Defined here so every reader validates the same shape.
+
+JUDGE_RATIONALE_MAX_WORDS = 60
+
+
+class ModelTokenUsage(BaseModel):
+    """Token counts and call count for one model."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    calls: int = 0
+    usage_missing: int = 0
+
+
+class TokenUsageRecord(BaseModel):
+    """Token usage summed over all models plus a per-model breakdown."""
+
+    tokens_in: int = 0
+    tokens_out: int = 0
+    usage_missing: int = 0
+    by_model: dict[str, ModelTokenUsage] = Field(default_factory=dict)
+
+
+class JudgeVerdict(BaseModel):
+    """Structured verdict returned by the custom LLM judge."""
+
+    correctness: Literal[0, 1, 2] = Field(
+        description="2 correct, 1 partly correct or incomplete, 0 wrong or contradicting"
+    )
+    citation_support: Literal[0, 1] = Field(
+        description="1 if every cited excerpt supports a claim and no central claim is uncited"
+    )
+    rationale: str = Field(
+        description=f"Short justification of at most {JUDGE_RATIONALE_MAX_WORDS} words"
+    )
+
+    @field_validator("rationale")
+    @classmethod
+    def limit_rationale(cls, v: str) -> str:
+        """Truncate the rationale to the word limit instead of failing the verdict."""
+        words = v.split()
+        return " ".join(words[:JUDGE_RATIONALE_MAX_WORDS])
+
+
+class FailedAttempt(BaseModel):
+    """One pipeline attempt that ended in an error event before the item succeeded."""
+
+    stage: str
+    message: str
+    utc: str
+
+
+class ItemScores(BaseModel):
+    """Deterministic per-item scores; fields that do not apply to a category are None."""
+
+    model_config = {"populate_by_name": True}
+
+    abstained: bool
+    abstention_correct: bool | None = None
+    hallucinated: bool | None = None
+    false_abstention: bool | None = None
+    context_hit_at_5: float | None = Field(default=None, alias="context_hit@5")
+    context_evidence_recall_at_5: float | None = Field(
+        default=None, alias="context_evidence_recall@5"
+    )
+    must_mention_coverage: float | None = None
+    llm_calls: int
+    latency_ms: int
+    used_web: bool
+    tokens_in: int
+    tokens_out: int
+    # Failed attempts before success (M08, D23); None in runs made before the field.
+    structured_output_failures: int | None = None
+    # Failed attempts caused by provider rate limits (not counted above).
+    rate_limited_attempts: int | None = None
+
+
+class EvalRecord(BaseModel):
+    """One line of per_question.jsonl."""
+
+    id: str
+    category: Literal["single", "multi", "version", "unanswerable"]
+    question: str
+    reference_answer: str | None
+    evidence: list[Evidence]
+    must_mention: list[str]
+    result: PipelineResult
+    context_texts: list[str]
+    usage: TokenUsageRecord
+    langsmith_run_id: str | None
+    scores: ItemScores
+    judge_eligible: bool
+    verdict: JudgeVerdict | None = None
+    failed_attempts: list[FailedAttempt] = Field(default_factory=list)
+
+
+class JudgeRecord(BaseModel):
+    """One line of judge_v<N>.jsonl."""
+
+    id: str
+    verdict: JudgeVerdict
+    judge_model: str
+    judge_prompt_version: int
+    usage: TokenUsageRecord = Field(default_factory=TokenUsageRecord)
+    cached: bool = False

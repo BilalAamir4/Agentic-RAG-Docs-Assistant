@@ -38,12 +38,17 @@ class Pipeline(Protocol):
     name: str
 
     def stream(
-        self, question: str, run_metadata: dict[str, Any] | None = None
+        self,
+        question: str,
+        run_metadata: dict[str, Any] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> Iterator[TraceEvent]:
         """Execute pipeline and stream TraceEvent instances.
 
         run_metadata is attached to the LangSmith trace when tracing is enabled and
-        must not change the yielded events.
+        must not change the yielded events. callbacks are LangChain callback handlers
+        appended to every LLM call's callbacks (for example ragdocs.providers.usage
+        .TokenUsage); they must not change the yielded events either.
 
         The final event must have type='answer' and data=PipelineResult.model_dump().
         On any exception, yields one type='error' event with a safe message and stops.

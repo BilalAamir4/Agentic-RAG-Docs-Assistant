@@ -31,6 +31,7 @@ from diskcache import Cache
 from tqdm import tqdm
 
 from ragdocs.config import Settings, get_settings
+from ragdocs.eval.budget_recorder import install_budget_recorder
 from ragdocs.eval.metrics import evidence_recall_at_k, hit_at_k, mrr
 from ragdocs.index.loader import get_index
 from ragdocs.io_utils import read_jsonl, write_jsonl
@@ -391,6 +392,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=None, help="Custom output directory")
     args = parser.parse_args()
 
+    install_budget_recorder()
     run_retrieval_eval(output_dir=args.output_dir)
 
 

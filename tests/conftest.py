@@ -44,3 +44,16 @@ def tracing_off(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch)
         if key not in saved:
             del os.environ[key]
     _clear_caches()
+
+
+@pytest.fixture(autouse=True)
+def record_live_budget(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Record every API call made by a live test in cache/budget.json (D7)."""
+    if not request.node.get_closest_marker("live"):
+        yield
+        return
+    from ragdocs.eval.budget_recorder import install_budget_recorder, uninstall_budget_recorder
+
+    install_budget_recorder()
+    yield
+    uninstall_budget_recorder()

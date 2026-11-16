@@ -5,6 +5,7 @@ import sys
 import time
 from pathlib import Path
 
+from ragdocs.eval.budget_recorder import install_budget_recorder
 from ragdocs.index.build import build_index
 
 
@@ -25,6 +26,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    install_budget_recorder()
     start_time = time.perf_counter()
     print("Building retrieval indexes...")
     result = build_index(

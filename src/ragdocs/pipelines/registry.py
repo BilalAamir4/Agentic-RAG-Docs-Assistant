@@ -36,7 +36,14 @@ def get_pipeline(name: str) -> Pipeline:
 
             retriever = get_retriever()
             chat_model = get_chat_model("generator")
-            structured_llm = build_structured_llm(chat_model)
+            from ragdocs.config import get_settings
+
+            settings = get_settings()
+            structured_llm = build_structured_llm(
+                chat_model,
+                method=settings.structured_output_method,
+                strict=settings.structured_output_strict,
+            )
             _PIPELINES[name] = BaselinePipeline(
                 retriever=retriever,
                 structured_llm=structured_llm,

@@ -10,7 +10,11 @@ Commands:
   hash            Print sha256 checksum and path for specified files
   ingest          Run documentation ingestion pipeline (added in M02)
   index           Build dense and sparse indexes (added in M04)
-  eval            Run pipeline evaluation (added in M07)
+  eval            Generate and score answers: eval --pipeline NAME [--run-dir DIR] (M08)
+  judge           Judge stored answers of a run: judge --run-dir DIR (M08)
+  judge-audit     Write or score the judge hand audit: judge-audit --run-dir DIR [--score]
+  compare         Compare runs into results/summary.md: compare RUN_DIR [RUN_DIR ...]
+  budget          Show trailing-window API usage per model: budget [--need MODEL=TOKENS[:REQUESTS]]
   validate-eval       Validate evaluation dataset format (added in M03)
   verify-sources      Verify source quotes against live page snapshots (added in M03)
   check-unanswerable  Check keyword absence for unanswerable items
@@ -224,8 +228,40 @@ def cmd_index(args: argparse.Namespace, extra_args: list[str]) -> int:
 
 
 def cmd_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M07", file=sys.stderr)
-    return 1
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "run_eval.py"), "--pipeline", args.pipeline]
+    if args.run_dir:
+        cmd += ["--run-dir", args.run_dir]
+    return run_command(cmd + extra_args)
+
+
+def cmd_judge(args: argparse.Namespace, extra_args: list[str]) -> int:
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "judge_run.py"), "--run-dir", args.run_dir]
+    return run_command(cmd + extra_args)
+
+
+def cmd_judge_audit(args: argparse.Namespace, extra_args: list[str]) -> int:
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "judge_audit.py"), "--run-dir", args.run_dir]
+    if args.score:
+        cmd.append("--score")
+    return run_command(cmd + extra_args)
+
+
+def cmd_budget(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Print per-model daily-window usage and remaining quota."""
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "budget.py")]
+    for need in args.need:
+        cmd += ["--need", need]
+    return run_command(cmd + extra_args)
+
+
+def cmd_compare(args: argparse.Namespace, extra_args: list[str]) -> int:
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "compare_runs.py"), *args.run_dirs]
+    return run_command(cmd + extra_args)
 
 
 def cmd_validate_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
@@ -314,7 +350,20 @@ def main() -> int:
     subparsers.add_parser("index", help="Build indexes")
 
     eval_parser = subparsers.add_parser("eval", help="Run pipeline evaluation")
-    eval_parser.add_argument("--pipeline", required=False, help="Pipeline name")
+    eval_parser.add_argument("--pipeline", required=True, help="Pipeline name")
+    eval_parser.add_argument("--run-dir", required=False, help="Run folder (resume)")
+
+    judge_parser = subparsers.add_parser("judge", help="Judge stored answers of a run")
+    judge_parser.add_argument("--run-dir", required=True, help="Run folder")
+
+    audit_parser = subparsers.add_parser("judge-audit", help="Write or score the judge audit")
+    audit_parser.add_argument("--run-dir", required=True, help="Run folder")
+    audit_parser.add_argument("--score", action="store_true", help="Score human labels")
+
+    budget_parser = subparsers.add_parser("budget", help="Show API usage and remaining quota")
+    budget_parser.add_argument("--need", action="append", default=[], help="MODEL=TOKENS[:REQ]")
+    compare_parser = subparsers.add_parser("compare", help="Compare run folders")
+    compare_parser.add_argument("run_dirs", nargs="+", help="Run folders; first is the base")
 
     val_eval_parser = subparsers.add_parser("validate-eval", help="Validate evaluation set")
     val_eval_parser.add_argument(
@@ -348,6 +397,10 @@ def main() -> int:
         "ingest": cmd_ingest,
         "index": cmd_index,
         "eval": cmd_eval,
+        "judge": cmd_judge,
+        "judge-audit": cmd_judge_audit,
+        "compare": cmd_compare,
+        "budget": cmd_budget,
         "validate-eval": cmd_validate_eval,
         "verify-sources": cmd_verify_sources,
         "check-unanswerable": cmd_check_unanswerable,

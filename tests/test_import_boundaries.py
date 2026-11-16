@@ -52,3 +52,18 @@ def test_import_boundaries_llm_module() -> None:
         "Boundary violation: importing ragdocs.providers.llm imported "
         "langchain_google_genai at module level"
     )
+
+
+def test_usage_module_is_runtime_safe() -> None:
+    """ragdocs.providers.usage imports neither ragdocs.eval nor langchain_google_genai."""
+    script = (
+        "import json, sys\n"
+        "import ragdocs.providers.usage\n"
+        "print(json.dumps(sorted(list(sys.modules.keys()))))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    modules: list[str] = json.loads(result.stdout)
+    assert not any(m.startswith("ragdocs.eval") for m in modules)
+    assert "langchain_google_genai" not in modules

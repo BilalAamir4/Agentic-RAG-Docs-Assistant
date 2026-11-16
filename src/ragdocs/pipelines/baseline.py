@@ -83,7 +83,10 @@ class BaselinePipeline(Pipeline):
         }
 
     def stream(
-        self, question: str, run_metadata: dict[str, Any] | None = None
+        self,
+        question: str,
+        run_metadata: dict[str, Any] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> Iterator[TraceEvent]:
         """Execute baseline pipeline and stream progress TraceEvents.
 
@@ -98,7 +101,8 @@ class BaselinePipeline(Pipeline):
         When LangSmith tracing is enabled the run is recorded as one trace: a parent run
         named after the pipeline with 'hybrid_retrieve' and 'generate' children.
         run_metadata is added to the parent run and generate run metadata; it never
-        changes the yielded events.
+        changes the yielded events. callbacks are appended after the call counter in
+        the LLM call config.
         """
         metadata = {"pipeline": self.name, **(run_metadata or {})}
         with traced_run(
@@ -107,7 +111,7 @@ class BaselinePipeline(Pipeline):
             inputs={"question": question},
             metadata=metadata,
         ) as parent:
-            yield from self._stream_events(question, metadata, parent)
+            yield from self._stream_events(question, metadata, parent, callbacks or [])
 
     def _retrieve_traced(self, question: str) -> list[Any]:
         """Retrieve chunks inside a 'hybrid_retrieve' retriever run."""
@@ -123,7 +127,11 @@ class BaselinePipeline(Pipeline):
         return chunks
 
     def _generate(
-        self, question: str, chunks: list[Any], metadata: dict[str, Any]
+        self,
+        question: str,
+        chunks: list[Any],
+        metadata: dict[str, Any],
+        callbacks: list[Any],
     ) -> tuple[Answer, dict[str, Any], int]:
         """Invoke the structured LLM as run 'generate' and validate its draft.
 
@@ -137,13 +145,21 @@ class BaselinePipeline(Pipeline):
         ]
         draft = self.structured_llm.invoke(
             messages,
-            config={"callbacks": [counter], "run_name": "generate", "metadata": metadata},
+            config={
+                "callbacks": [counter, *callbacks],
+                "run_name": "generate",
+                "metadata": metadata,
+            },
         )
         answer, diagnostics = validate_answer(draft, chunks)
         return answer, diagnostics, counter.llm_calls
 
     def _stream_events(
-        self, question: str, metadata: dict[str, Any], parent: TracedRun
+        self,
+        question: str,
+        metadata: dict[str, Any],
+        parent: TracedRun,
+        callbacks: list[Any],
     ) -> Iterator[TraceEvent]:
         """Yield the baseline TraceEvents in the order documented on stream()."""
         start_time = time.perf_counter()
@@ -172,7 +188,7 @@ class BaselinePipeline(Pipeline):
                 {"mode": retrieval_mode, "chunks": [_chunk_summary(c) for c in chunks]},
             )
             yield emit("node_start", "generate", "Generating cited answer")
-            answer, diagnostics, llm_calls = self._generate(question, chunks, metadata)
+            answer, diagnostics, llm_calls = self._generate(question, chunks, metadata, callbacks)
             yield emit("node_end", "generate", "Answer generated and validated", diagnostics)
 
             pipeline_result = PipelineResult(

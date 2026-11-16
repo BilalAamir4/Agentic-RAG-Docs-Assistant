@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Sequence
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -39,9 +39,18 @@ class StructuredLLM(Protocol):
         ...
 
 
-def build_structured_llm(chat_model: BaseChatModel) -> StructuredLLM:
-    """Bind AnswerDraft structured output schema to chat model."""
-    return chat_model.with_structured_output(AnswerDraft)
+def build_structured_llm(
+    chat_model: BaseChatModel,
+    method: Literal["function_calling", "json_schema"] = "function_calling",
+    strict: bool | None = None,
+) -> StructuredLLM:
+    """Bind the AnswerDraft schema to the chat model with the given structured-output method.
+
+    method="json_schema" with strict=True uses Groq's constrained decoding (see D23).
+    """
+    if method == "json_schema":
+        return chat_model.with_structured_output(AnswerDraft, method=method, strict=strict)
+    return chat_model.with_structured_output(AnswerDraft, method=method)
 
 
 def _extract_chunk(c: RetrievedChunk | Chunk) -> Chunk:

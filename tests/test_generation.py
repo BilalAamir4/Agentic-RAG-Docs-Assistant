@@ -324,3 +324,27 @@ def test_generate_answer_invokes_structured_llm_and_validates() -> None:
     assert len(answer.citations) == 1
     assert answer.citations[0].chunk_id == "chk-01"
     assert not diag["uncited"]
+
+
+class _RecordingChatModel:
+    """Records with_structured_output arguments."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, dict[str, Any]]] = []
+
+    def with_structured_output(self, schema: Any, **kwargs: Any) -> str:
+        self.calls.append((schema, kwargs))
+        return "bound"
+
+
+def test_build_structured_llm_methods() -> None:
+    """function_calling passes no strict flag; json_schema passes strict through (D23)."""
+    from ragdocs.generation.answer import AnswerDraft, build_structured_llm
+
+    model = _RecordingChatModel()
+    build_structured_llm(model)  # type: ignore[arg-type]
+    build_structured_llm(model, method="json_schema", strict=True)  # type: ignore[arg-type]
+    assert model.calls == [
+        (AnswerDraft, {"method": "function_calling"}),
+        (AnswerDraft, {"method": "json_schema", "strict": True}),
+    ]
