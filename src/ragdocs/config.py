@@ -122,6 +122,11 @@ class Settings(BaseSettings):
     eval_audit_strata: dict[str, int] = Field(
         default_factory=lambda: {"single": 6, "multi": 2, "version": 2}
     )
+    # Judged items with correctness below this are added to the audit after the seeded
+    # draw (stratification by judge score, D9). The gate is this agreement rate on each
+    # column over all audited items.
+    eval_audit_add_below_correctness: int = 2
+    eval_audit_gate_rate: float = Field(default=0.8, gt=0.0, le=1.0)
     eval_set_sha256: str = "316b1d683050e426ad5bf2324b9ca7211d30ea2566276320489e6acb538a470f"
     eval_set_tag: str = "eval-set-v1"
 

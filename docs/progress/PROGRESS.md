@@ -12,7 +12,7 @@ Index of implementation modules and their delivery tracking status.
 | M05 | Hybrid retrieval and reranking | Done | 2026-10-25 | [M05-retrieval.md](M05-retrieval.md) |
 | M06 | Baseline generation | Done | 2026-10-25 | [M06-baseline-generation.md](M06-baseline-generation.md) |
 | M07 | LangSmith tracing and plan sync | Done | 2026-11-15 | [M07-langsmith-tracing.md](M07-langsmith-tracing.md) |
-| M08 | Eval harness, custom judge, baseline run | Not started | - | - |
+| M08 | Eval harness, custom judge, baseline run | Done | 2026-11-18 | [M08-eval-harness.md](M08-eval-harness.md) |
 | M09 | RAGAS, LangSmith experiments, baseline freeze | Not started | - | - |
 | M10 | Corrective RAG | Not started | - | - |
 | M11 | Self-RAG | Not started | - | - |

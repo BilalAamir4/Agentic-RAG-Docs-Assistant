@@ -16,6 +16,8 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Generated outputs (judge_audit.md quotes doc code blocks verbatim); never reformat them.
+extend-exclude = ["results"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

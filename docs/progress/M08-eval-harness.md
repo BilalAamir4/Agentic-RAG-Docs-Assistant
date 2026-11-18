@@ -1,11 +1,11 @@
 M08: Eval harness, custom judge, baseline run
-Status: Partial
-Date: 2026-11-16
+Status: Done
+Date: 2026-11-18
 
 Goal
 `py tasks.py eval --pipeline baseline` runs all 50 items, throttled and resumable, and records the full PipelineResult, token usage, LangSmith run id and deterministic scores. Per the human's change (D9 update), judging is a separate resumable pass, `py tasks.py judge --run-dir DIR`, writing judge_v<N>.jsonl. The judge is audited by hand on 10 items.
 
-Current state (2026-11-16): harness, judge, report, compare, audit and tests are built; lint and tests pass. Baseline run results/runs/baseline-20261116-0919 is complete (50 lines) and judged (judge_v1.jsonl, 41 lines). Screenshot saved. results/judge_audit.md is written and waits for the human columns. Pending: audit score and gate (D9), commit.
+Current state (2026-11-18): harness, judge, report, compare, audit and tests are built; lint and tests pass. The first baseline run results/runs/baseline-20261116-0919 (function_calling) is kept as evidence. The baseline run of record is results/runs/baseline-20261116-1050 (json_schema strict, D23): 50/50 items, judged 39/39 eligible items. Judge audit on 11 items passed the gate (10/11 on each column, D9). results/summary.md written by `py tasks.py compare results/runs/baseline-20261116-1050`.
 
 What was built
 - src/ragdocs/providers/usage.py: TokenUsage callback handler; per-model input/output tokens and calls, keyed by `ls_model_name`; calls without usage data counted in usage_missing, including failed calls (on_llm_error, added after the baseline run, see Known issues). Runtime-safe.
@@ -26,9 +26,10 @@ What was built
 - src/ragdocs/eval/runner.py: run_eval; configure_tracing at start; eval-set sha256 and `git diff --quiet eval-set-v1 -- data/eval/eval_set.jsonl` checks; config.json written first (or checked on resume); items in id order; one `eval_item` trace per item; one appended line per item; resume by id; exit 3 with remaining ids and reset time; flush_traces in finally.
 - src/ragdocs/eval/report.py: summarize (with optional extra score files for M09), render_markdown, write_summary, format_rate "rate (count/n)".
 - src/ragdocs/eval/compare.py: render_comparison, check_comparable, changed_questions.
-- src/ragdocs/eval/judge_audit.py: select_audit_items, write_audit (refuses to overwrite filled labels), parse_audit_table, score_audit.
+- src/ragdocs/eval/judge_audit.py: select_audit_items, write_audit (refuses to overwrite filled labels), parse_audit_table, score_audit. 2026-11-17: select_low_score_items and AuditSelection (items with judge correctness below Settings.eval_audit_add_below_correctness added after the seeded draw, flagged in a new selection column); AuditScore.needed/passes for the gate (Settings.eval_audit_gate_rate); scripts/judge_audit.py prints the gate; test added in tests/test_eval_report.py.
 - scripts/run_eval.py, scripts/judge_run.py, scripts/compare_runs.py, scripts/judge_audit.py: thin CLIs.
-- tasks.py: eval --pipeline NAME [--run-dir DIR], judge --run-dir DIR, judge-audit --run-dir DIR [--score], compare RUN_DIR...; other commands unchanged.
+- tasks.py: eval --pipeline NAME [--run-dir DIR], judge --run-dir DIR, judge-audit --run-dir DIR [--score] [--force], compare RUN_DIR..., budget [--need ...]; other commands unchanged. (--force was accepted by scripts/judge_audit.py but not passed through by tasks.py until 2026-11-17.)
+- pyproject.toml: `extend-exclude = ["results"]` for ruff (2026-11-17). ruff 0.17.0 formats Python code blocks inside Markdown, and the regenerated results/judge_audit.md quotes doc excerpts verbatim, so `py tasks.py lint` failed on a generated file and `py tasks.py format` would have rewritten it.
 - requirements-dev.txt: pinned tzdata==2026.5 (zoneinfo on Windows needs it; already installed as a pandas dependency).
 - tests/eval_fakes.py, tests/test_eval_throttle_usage.py, tests/test_eval_runner.py, tests/test_eval_report.py: new. tests/test_baseline_snapshot.py: callbacks test added. tests/test_import_boundaries.py: usage module boundary test. tests/test_config.py: judge_model default updated.
 - docs/screenshots/langsmith-eval-item.png: q001 eval_item trace (1568 x 736), captured with Claude in Chrome on 2026-11-16.
@@ -157,7 +158,36 @@ LangSmith check (2026-11-16, Claude in Chrome)
 - docs/screenshots/langsmith-baseline-trace.png (M07) already exists (committed in 1ca68ef); not retaken.
 
 Judge audit
-- `py tasks.py judge-audit --run-dir results/runs/baseline-20261116-0919` wrote results/judge_audit.md with q006, q011, q015, q022, q024, q028 (single), q031, q033 (multi), q040, q041 (version). Score: pending human labels.
+- First sheet (2026-11-16, run 0919, superseded, never labelled): q006, q011, q015, q022, q024, q028, q031, q033, q040, q041.
+- Current sheet (2026-11-17): `py tasks.py judge-audit --run-dir results/runs/baseline-20261116-1050 --force` printed "Wrote .../results/judge_audit.md with items: q006, q012, q016, q023, q026, q028, q031, q033, q040, q041" (6 single, 2 multi, 2 version; seed 21). The draw differs from the first sheet because it samples from this run's judged items (q008 and q025 now abstain and are not judged). Judge verdicts on the 10: correctness 2 on all 10; citation_support 0 on q006, 1 on the other 9.
+- Added item (human, 2026-11-17, D9 update): the draw contained no item the judge scored below 2, so every judged item with correctness below 2 is added, flagged "added: judge score < 2". This run has one: q024 (judge 1, 1). `py tasks.py judge-audit --run-dir results/runs/baseline-20261116-1050 --force` printed "seed 21: q006, q012, q016, q023, q026, q028, q031, q033, q040, q041" and "added (judge correctness < 2): q024". The table now has a selection column. Gate: at least 80% on each column over 11 items, so 9/11.
+- Human labels (2026-11-18), entered into the three human columns of results/judge_audit.md (notes kept here so the cells stay parseable). Provenance per the human: Bilal labelled 8 items; Claude labelled all 11 independently; the 3 disagreements were resolved by reasoning item by item; the 3 items Bilal skipped use Claude's labels. Rules: a missing reference fact lowers correctness only if the question needs it; the structured CITED list is the citation (D20), inline [n] markers not required.
+
+  | id | judge (corr, cite) | human corr | human cite | faithful | note |
+  |---|---|---|---|---|---|
+  | q006 | 2, 0 | 2 | 1 | yes | |
+  | q012 | 2, 1 | 2 | 1 | yes | |
+  | q016 | 2, 1 | 2 | 1 | no | invented final code line: items.value / "I love pizza" |
+  | q023 | 2, 1 | 2 | 1 | yes | |
+  | q026 | 2, 1 | 2 | 1 | yes | |
+  | q028 | 2, 1 | 2 | 1 | yes | |
+  | q031 | 2, 1 | 1 | 1 | yes | missing the different-schema pattern; the question needs it |
+  | q033 | 2, 1 | 2 | 1 | no | "root stream still outputs the parent's tokens" is not in any excerpt |
+  | q040 | 2, 1 | 2 | 1 | yes | |
+  | q041 | 2, 1 | 2 | 1 | yes | |
+  | q024 (added) | 1, 1 | 1 | 1 | no | cause stitched from unrelated excerpts [1] and [3]; reducer fix missing |
+
+- `py tasks.py judge-audit --run-dir results/runs/baseline-20261116-1050 --score`:
+  - "correctness agreement: 10/11"
+  - "citation_support agreement: 10/11"
+  - "gate (80% on each column, 9/11): PASS"
+  - "disagreement q006: correctness judge 2 / human 2; citation_support judge 0 / human 1"
+  - "disagreement q031: correctness judge 2 / human 1; citation_support judge 1 / human 1"
+- Gate recorded in D9 (passed).
+- Judge citation check (every judged item with citation_support 0, scratchpad script over both runs):
+  - Run 1050: q006 only. Answer "Use the graph's `update_state` method ..." has no inline [n] markers; its structured CITED list holds excerpt [2]. Judge rationale: "it did not provide any citations from the excerpts, so citation_support is 0". The 0 is caused by the missing inline markers, which D20 does not require; the human label is 1.
+  - Run 0919 (for comparison): q024 (inline [1][3]; rationale says the cited excerpts do not support the claim), q034 (inline [1][2] and [4]; rationale says [4] does not support the decorator usage), q025 (no inline markers; rationale only about the wrong ValidationError claim). None of these is marker-driven by its rationale.
+  - So 1 of 39 judged items in the run of record (q006) is a marker-driven citation error.
 
 Decisions made
 - Judge model and Groq TPD budget: see D7 updates.
@@ -177,6 +207,8 @@ Deviations from the prompt
 - judge-audit takes `--force` to overwrite an audit file that already has human labels; without it the command refuses.
 - RollingBudget takes an optional tokens_per_day and a time zone (human-approved TPD budget; time zone per provider as above).
 - tzdata pinned in requirements-dev.txt.
+- 2026-11-17: ruff excludes results/ (pyproject.toml) and tasks.py passes judge-audit --force through; both were needed to run the requested `judge-audit --force` and keep `py tasks.py lint` passing without hand-editing a generated file.
+- 2026-11-17: the eval budget check also listed gemini-embedding-001=400:34 (one query embedding per remaining item), per the AGENTS.md rule to check every model a run uses.
 
 Known issues and limitations
 - Groq structured-output failures: gpt-oss-120b sometimes calls a wrongly named tool or no tool (`400 tool_use_failed`); at least 6 failed calls in this run. Users of the baseline pipeline would see an error event in those cases. The eval scores the attempt that succeeded, so this failure rate does not appear in summary.md. The pipeline was not changed (module constraint).
@@ -189,7 +221,7 @@ Known issues and limitations
 Structured-output fix and rerun (2026-11-16, in progress)
 - Method check: scripts/structured_output_check.py on q015, q028, q001 to q008 (same contexts, one call per method): function_calling 2/10 failed, json_schema strict 0/10. Switched to json_schema strict (D23).
 - Added structured_output_failures and rate_limited_attempts per item (from <run>/failed_attempts.jsonl) and both rows in summary.md.
-- Rerun results/runs/baseline-20261116-1050 started 10:50Z (old run folder untouched). Paused at 16/50 at 11:01Z on Groq 429 "tokens per day (TPD): Limit 200000, Used 197584". structured_output_failures so far: 0 over 16 items; rate_limited_attempts 4 (q016); q017 has 6 logged 429 attempts.
+- Rerun results/runs/baseline-20261116-1050 started 10:50Z on 2026-11-16 (old run folder untouched); completed 2026-11-17 (see "Rerun completed" below). Paused at 16/50 at 11:01Z on Groq 429 "tokens per day (TPD): Limit 200000, Used 197584". structured_output_failures so far: 0 over 16 items; rate_limited_attempts 4 (q016); q017 has 6 logged 429 attempts.
 - Why the harness did not stop first: RollingBudget._check_daily compared against the full daily limits, not safety x limit; and cache/budget.json (193,290 tokens) is below Groq's count (about 199,800) because failed calls before the on_llm_error fix were not recorded. Fixed: daily checks now use safety x limit (test added). Tests: "130 passed, 1 deselected".
 - Groq's TPD is not a UTC calendar day: all ten 429 retry-after values equal (used + requested - 200,000) / (200,000 / 86,400 s), a token bucket refilling at about 2.31 tokens/s (D7).
 
@@ -201,19 +233,133 @@ Budget model and recorder (human decisions, 2026-11-16, D7)
 - cache/budget.json rebuilt for 2026-11-16 from run evidence (earlier files kept outside the repo): gpt-oss-120b 102 requests, 1 reconciliation event of 18,730 tokens at 11:01:26Z so the bucket balance equals Groq's Used 197,585 then; gemini-3.5-flash-lite 41 / 97,588; gemini-embedding-001 92 requests.
 - `py tasks.py budget --need openai/gpt-oss-120b=110000:34` (2026-11-16 about 11:55Z): balance 193,240, "DOES NOT FIT; fits at 2026-11-17T02:22+00:00", exit 1.
 - Tests: `py tasks.py lint` "All checks passed!", "119 files already formatted"; `py tasks.py test` "143 passed, 1 deselected in 4.64s".
+- Tests (2026-11-17, after the pyproject and tasks.py changes): `py tasks.py lint` "All checks passed!", "115 files already formatted" (before the exclude: "1 file would be reformatted", results\judge_audit.md); `py tasks.py test` "143 passed, 1 deselected in 18.13s". After the audit change: `py tasks.py lint` "All checks passed!", "115 files already formatted"; `py tasks.py test` "144 passed, 1 deselected in 14.29s". Final (2026-11-18, after the labels): `py tasks.py lint` "All checks passed!", "115 files already formatted"; `py tasks.py test` "144 passed, 1 deselected in 7.41s".
+
+Rerun completed (2026-11-17)
+- Step 0: `git log --oneline -3` shows 7ee734e "M08: WIP eval harness, judge split, budget model, json_schema (D23)" at HEAD; not re-made.
+- `date -u`: 2026-11-17T15:34:46Z.
+- `py tasks.py budget --need openai/gpt-oss-120b=110000:34 --need gemini-embedding-001=400:34`: gpt-oss-120b token_bucket 0/1000 requests, 0/200,000 tokens, 180,000 tokens free at 0.9; gemini-embedding-001 0/1000; both "fits".
+- `py tasks.py eval --pipeline baseline --run-dir results/runs/baseline-20261116-1050`: "16 items done, 34 to run", q017 to q050 each "done (1 calls ...)", "All items done", exit 0, one invocation, no 429 and no failed attempt (failed_attempts.jsonl still has the 10 lines from 2026-11-16).
+- `py tasks.py budget --need gemini-3.5-flash-lite=100000:42` after the eval: gpt-oss-120b bucket balance 13 requests / 72,062 tokens; gemini-3.5-flash-lite 0/500; gemini-embedding-001 34/1000; "fits".
+- `py tasks.py judge --run-dir results/runs/baseline-20261116-1050`: "Judge v1: 0 done, 39 to judge", "Judging complete", exit 0, 0 failures, 0 cached.
+- Model misses: cache/budget_model_misses.jsonl does not exist (no per-day 429 in this session), so there are no entries to copy.
+
+Old run vs new run (Overall, from each run's summary.md)
+
+| Field | baseline-20261116-0919 (function_calling) | baseline-20261116-1050 (json_schema strict) |
+|---|---|---|
+| correct (correctness = 2) | 0.905 (38/42) | 0.905 (38/42) |
+| correct or partial (correctness >= 1) | 0.929 (39/42) | 0.929 (39/42) |
+| mean correctness (0-2) | 1.833 (n=42) | 1.833 (n=42) |
+| citation_support (judged items) | 0.927 (38/41) | 0.974 (38/39) |
+| context_hit@5 | 0.810 (34/42) | 0.810 (34/42) |
+| mean context_evidence_recall@5 | 0.726 (n=42) | 0.726 (n=42) |
+| mean must_mention coverage | 0.929 (n=42) | 0.905 (n=42) |
+| false_abstention | 0.024 (1/42) | 0.071 (3/42) |
+| abstention_correct (unanswerable) | 1.000 (8/8) | 1.000 (8/8) |
+| hallucinated (unanswerable) | 0.000 (0/8) | 0.000 (0/8) |
+| p50 / p95 latency_ms | 2016 / 4085 ms | 2208 / 3734 ms |
+| mean tokens per question | 2207.960 | 2333.560 |
+| structured_output_failures | not measured (at least 6 `400 tool_use_failed` calls, 3 pauses) | 0 (n=50) |
+| items with >= 1 structured_output failure | not measured | 0.000 (0/50) |
+| rate-limited attempts | not measured | 10 (n=50): q016 4, q017 6 |
+| generation tokens (in / out, calls) | 91,874 / 18,524, 50 | 95,674 / 21,004, 50 |
+| judge tokens (in / out, calls) | 94,959 / 2,629, 41 | 84,398 / 2,450, 39 |
+
+Ceiling for later pipelines: the baseline is correct on 38/42 answerable items, so M10 and M11 can gain at most 4 items on correctness (q008, q024, q025, q029 in this run). M15 should expect the pipelines to differ mainly in abstention (false abstention 3/42 here), hallucination on unanswerable items (0/8 here), RAGAS faithfulness (M09), and cost and latency, not in correctness.
+
+The false-abstention change (1/42 to 3/42) is recorded in D23 as observed; the net 2 items are inside the D19 3-item noise margin, so it is not attributed to the method.
+
+Items whose verdict or abstention changed between the runs: q006 (2,1) to (2,0); q008 (2,1) to false abstention; q024 (0,0) to (1,1); q025 (0,0) to false abstention; q034 (1,0) to (2,1). q029 is a false abstention in both runs. The context_hit@5 values are identical per item (same retrieval), so the differences come from generation (method change and sampling) and from the judge.
+
+summary.md (results/runs/baseline-20261116-1050/summary.md):
+
+### Run summary: baseline-20261116-1050
+
+Pipeline: baseline. Tracing enabled: True.
+Judge: gemini-3.5-flash-lite, prompt version 1 (source judge_v1.jsonl), judged 39/39 eligible items.
+
+Rates are shown as rate (count/n). Correctness uses n = every answerable item;
+a false abstention counts as correctness 0.
+
+#### Overall
+
+| Field | Value |
+|---|---|
+| items | 50 |
+| answerable n | 42 |
+| correct (correctness = 2) | 0.905 (38/42) |
+| correct or partial (correctness >= 1) | 0.929 (39/42) |
+| mean correctness (0-2) | 1.833 (n=42) |
+| citation_support (judged items) | 0.974 (38/39) |
+| context_hit@5 (on contexts given to the generator) | 0.810 (34/42) |
+| mean context_evidence_recall@5 (on contexts given to the generator) | 0.726 (n=42) |
+| mean must_mention coverage | 0.905 (n=42) |
+| false_abstention | 0.071 (3/42) |
+| abstention_correct (unanswerable) | 1.000 (8/8) |
+| hallucinated (unanswerable) | 0.000 (0/8) |
+| mean llm_calls | 1.000 (n=50) |
+| p50 latency_ms | 2208 ms |
+| p95 latency_ms | 3734 ms |
+| mean tokens per question | 2333.560 (n=50) |
+| used_web | 0.000 (0/50) |
+| structured_output_failures (failed attempts before success) | 0 (n=50) |
+| items with >= 1 structured_output failure | 0.000 (0/50) |
+| rate-limited attempts (not counted above) | 10 (n=50) |
+
+#### Per category
+
+| Field | single | multi | version | unanswerable |
+|---|---|---|---|---|
+| items | 28 | 8 | 6 | 8 |
+| answerable n | 28 | 8 | 6 | 0 |
+| correct (correctness = 2) | 0.893 (25/28) | 0.875 (7/8) | 1.000 (6/6) | - |
+| correct or partial (correctness >= 1) | 0.929 (26/28) | 0.875 (7/8) | 1.000 (6/6) | - |
+| mean correctness (0-2) | 1.821 (n=28) | 1.750 (n=8) | 2.000 (n=6) | - |
+| citation_support (judged items) | 0.962 (25/26) | 1.000 (7/7) | 1.000 (6/6) | - |
+| context_hit@5 (on contexts given to the generator) | 0.786 (22/28) | 0.875 (7/8) | 0.833 (5/6) | - |
+| mean context_evidence_recall@5 (on contexts given to the generator) | 0.786 (n=28) | 0.500 (n=8) | 0.750 (n=6) | - |
+| mean must_mention coverage | 0.893 (n=28) | 0.875 (n=8) | 1.000 (n=6) | - |
+| false_abstention | 0.071 (2/28) | 0.125 (1/8) | 0.000 (0/6) | - |
+| abstention_correct (unanswerable) | - | - | - | 1.000 (8/8) |
+| hallucinated (unanswerable) | - | - | - | 0.000 (0/8) |
+| mean llm_calls | 1.000 (n=28) | 1.000 (n=8) | 1.000 (n=6) | 1.000 (n=8) |
+| p50 latency_ms | 2062 ms | 2772 ms | 2430 ms | 1822 ms |
+| p95 latency_ms | 3447 ms | 3610 ms | 3420 ms | 4181 ms |
+| mean tokens per question | 2399.107 (n=28) | 2368.500 (n=8) | 2352.833 (n=6) | 2054.750 (n=8) |
+| used_web | 0.000 (0/28) | 0.000 (0/8) | 0.000 (0/6) | 0.000 (0/8) |
+| structured_output_failures (failed attempts before success) | 0 (n=28) | 0 (n=8) | 0 (n=6) | 0 (n=8) |
+| items with >= 1 structured_output failure | 0.000 (0/28) | 0.000 (0/8) | 0.000 (0/6) | 0.000 (0/8) |
+| rate-limited attempts (not counted above) | 10 (n=28) | 0 (n=8) | 0 (n=6) | 0 (n=8) |
+
+#### Totals (generation)
+
+- Tokens in: 95674; tokens out: 21004; LLM calls: 50; calls without usage data: 0
+- openai/gpt-oss-120b: 95674 in, 21004 out, 50 calls
+- Judge: 84398 in, 2450 out, 39 calls, 0 cached verdicts
+
+Correctness 2 with context_hit@5 = 0 (run baseline-20261116-1050)
+Method: for each answerable item with judge correctness 2 and context_hit@5 0, I compared the answer's key facts with the five retrieved chunks (doc_path#anchor shown) by reading them; must_mention terms were also matched by substring. Result: 5 items, all strict-anchor misses (the key facts are in a retrieved chunk from a different anchor than the eval evidence); none answered from memory.
+- q012 (single; evidence agentic-rag.mdx#generate-a-query-or-respond). Strict-anchor miss. Context [1] graph-api.mdx#working-with-messages-in-graph-state, under the heading "MessagesState": "there exists a prebuilt state called `MessagesState` ... defined with a single `messages` key which is a list of `AnyMessage` objects and uses the add_messages reducer", which is the answer's content.
+- q018 (single; evidence streaming.mdx#stream-modes). Strict-anchor miss: same document, other anchor. Contexts [1], [2], [3], [5] streaming.mdx#llm-tokens (headings "Filter by LLM invocation", "Filter by node") show `stream_mode="messages"` with `(message, metadata)` chunks: "The "messages" stream mode streams LLM tokens with metadata".
+- q031 (multi; evidence add-memory.mdx#use-in-subgraphs, use-subgraphs.mdx#call-a-subgraph-inside-a-node). Strict-anchor miss. Context [4] use-subgraphs.mdx#define-subgraph-communication (pass a compiled subgraph to add_node when parent and subgraph share state keys; a wrapper function when schemas differ) and context [3] use-subgraphs.mdx#subgraph-persistence ("The parent graph must be compiled with a checkpointer"; the default subgraph mode "inherits the parent's checkpointer"). The answer omits the wrapper-function case for different schemas; the judge still gave 2.
+- q038 (version; evidence event-streaming.mdx#resume-after-an-interrupt). Strict-anchor miss. Context [5] interrupts.mdx#resuming-interrupts ("Key points about resuming": same thread ID; "The value passed to `Command(resume=...)` becomes the return value of the interrupt call") and context [2] graph-api.mdx#input-to-invoke-or-stream (heading "resume").
+- q039 (single; evidence thinking-in-langgraph.mdx#handle-errors-appropriately). Strict-anchor miss. Context [3] use-graph-api.mdx#combine-control-flow-and-state-updates-with-command and context [4] graph-api.mdx#return-from-nodes (heading "`update` and `goto`": "Return Command from node functions to update state and route to the next node in a single step").
 
 Model misses (bucket model)
-- None so far.
+- None so far (2026-11-17: cache/budget_model_misses.jsonl absent; no per-day 429 since the bucket model was adopted).
 
 Open questions for the human
-- None pending. Next session (after 02:22Z on 2026-11-17): budget check for openai/gpt-oss-120b=110000:34, resume results/runs/baseline-20261116-1050 if it fits, judge, write the correctness-2 / context_hit@5-0 list, regenerate results/judge_audit.md, stop for the human labels.
+- None pending (audit labels received 2026-11-18).
 
 Proposed follow-ups (out of scope)
 - Cache query embeddings at runtime (or in the eval only) so resumed or repeated runs do not re-embed; this touches retrieval, so it needs a decision.
 - `.env.example` has `RAGDOCS_ENV=` empty (carried over from M07).
 - Groq tool_use_failed: try `with_structured_output(AnswerDraft, method="json_schema", strict=True)` for gpt-oss models (Groq lists gpt-oss-120b under strict json_schema at https://console.groq.com/docs/structured-outputs; langchain-groq 1.1.3 `_STRICT_STRUCTURED_OUTPUT_MODELS`). This changes the pipeline, so it needs its own module and a re-run.
+- Judge prompt version 2: state explicitly that the CITED / NOT CITED flags are the answer's citations and inline [n] markers are not required (D20), to remove the q006-type error. Needs a version bump and a re-judge of every run.
 - Cohere rerank calls are not recorded in cache/budget.json. Not needed now: use_reranker is False, so nothing calls Cohere. Add recording if reranking is turned on.
 
 Prerequisites for the next module
-- results/summary.md written by `py tasks.py compare results/runs/baseline-20261116-0919` (single-run table).
-- Pending: audit gate result in D9; commit "M08: eval harness, judge and baseline run" (run folder, results/judge_audit.md, results/summary.md).
+- Baseline run of record for M09 and later comparisons: results/runs/baseline-20261116-1050 (judge_v1.jsonl). results/summary.md written by `py tasks.py compare results/runs/baseline-20261116-1050`.
+- M09 can use the faithful column of results/judge_audit.md (no on q016, q033, q024) to sanity-check RAGAS faithfulness.
+- M10 and M11 grader calls on openai/gpt-oss-20b use structured_output_method / structured_output_strict (D23).

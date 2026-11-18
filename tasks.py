@@ -12,7 +12,7 @@ Commands:
   index           Build dense and sparse indexes (added in M04)
   eval            Generate and score answers: eval --pipeline NAME [--run-dir DIR] (M08)
   judge           Judge stored answers of a run: judge --run-dir DIR (M08)
-  judge-audit     Write or score the judge hand audit: judge-audit --run-dir DIR [--score]
+  judge-audit     Write or score the judge hand audit: judge-audit --run-dir DIR [--score] [--force]
   compare         Compare runs into results/summary.md: compare RUN_DIR [RUN_DIR ...]
   budget          Show trailing-window API usage per model: budget [--need MODEL=TOKENS[:REQUESTS]]
   validate-eval       Validate evaluation dataset format (added in M03)
@@ -246,6 +246,8 @@ def cmd_judge_audit(args: argparse.Namespace, extra_args: list[str]) -> int:
     cmd = [str(py), str(REPO_ROOT / "scripts" / "judge_audit.py"), "--run-dir", args.run_dir]
     if args.score:
         cmd.append("--score")
+    if args.force:
+        cmd.append("--force")
     return run_command(cmd + extra_args)
 
 
@@ -359,6 +361,7 @@ def main() -> int:
     audit_parser = subparsers.add_parser("judge-audit", help="Write or score the judge audit")
     audit_parser.add_argument("--run-dir", required=True, help="Run folder")
     audit_parser.add_argument("--score", action="store_true", help="Score human labels")
+    audit_parser.add_argument("--force", action="store_true", help="Overwrite filled labels")
 
     budget_parser = subparsers.add_parser("budget", help="Show API usage and remaining quota")
     budget_parser.add_argument("--need", action="append", default=[], help="MODEL=TOKENS[:REQ]")

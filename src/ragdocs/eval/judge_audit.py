@@ -1,11 +1,14 @@
-"""Hand audit of the judge on 10 stratified items (D9).
+"""Hand audit of the judge on 10 stratified items plus low-scored items (D9).
 
-write_audit picks judged items with a fixed seed and writes results/judge_audit.md
-with a table whose last three columns the human fills in. score_audit compares the
-human columns with the run's current effective verdicts, so after a re-judge the same
-human labels score the new verdicts.
+write_audit picks judged items per category with a fixed seed, then adds every other
+judged item whose judge correctness is below a threshold (stratification by judge
+score, not a redraw), and writes results/judge_audit.md with a table whose last three
+columns the human fills in. score_audit compares the human columns with the run's
+current effective verdicts, so after a re-judge the same human labels score the new
+verdicts.
 """
 
+import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,10 +19,10 @@ from ragdocs.io_utils import read_text, write_text
 from ragdocs.schemas import EvalRecord
 
 TABLE_HEADER = (
-    "| # | id | category | judge correctness | judge citation_support "
+    "| # | id | category | selection | judge correctness | judge citation_support "
     "| human correctness (0/1/2) | human citation_support (0/1) | faithful (yes/no) |"
 )
-N_COLUMNS = 8
+N_COLUMNS = 9
 
 
 def select_audit_items(
@@ -41,10 +44,24 @@ def select_audit_items(
     return picked
 
 
-def _item_section(n: int, r: EvalRecord, ev: EffectiveVerdicts) -> list[str]:
+def select_low_score_items(
+    records: list[EvalRecord], ev: EffectiveVerdicts, exclude: set[str], below: int
+) -> list[EvalRecord]:
+    """Judged items with judge correctness below `below` not already in `exclude`, by id."""
+    return sorted(
+        (
+            r
+            for r in records
+            if r.id in ev.verdicts and r.id not in exclude and ev.verdicts[r.id].correctness < below
+        ),
+        key=lambda r: r.id,
+    )
+
+
+def _item_section(n: int, r: EvalRecord, ev: EffectiveVerdicts, selection: str) -> list[str]:
     """Markdown details for one audited item."""
     v = ev.verdicts[r.id]
-    lines = [f"## {n}. {r.id} ({r.category})", "", f"**Question:** {r.question}", ""]
+    lines = [f"## {n}. {r.id} ({r.category}; {selection})", "", f"**Question:** {r.question}", ""]
     lines += [f"**Reference answer:** {r.reference_answer}", ""]
     lines += [f"**must_mention:** {', '.join(r.must_mention)}", ""]
     lines += ["**Answer:**", "", r.result.answer.text, "", "**Excerpts (context order):**", ""]
@@ -63,13 +80,34 @@ def _item_section(n: int, r: EvalRecord, ev: EffectiveVerdicts) -> list[str]:
     return lines
 
 
-def render_audit(run_dir: Path, items: list[EvalRecord], ev: EffectiveVerdicts) -> str:
+@dataclass
+class AuditSelection:
+    """Seeded draw plus items added by judge score."""
+
+    seed: int
+    drawn: list[EvalRecord]
+    added: list[EvalRecord]
+    add_below: int
+
+    def rows(self) -> list[tuple[EvalRecord, str]]:
+        """Items in table order with their selection label."""
+        added_label = f"added: judge score < {self.add_below}"
+        return [(r, f"seed {self.seed}") for r in self.drawn] + [
+            (r, added_label) for r in self.added
+        ]
+
+
+def render_audit(run_dir: Path, sel: AuditSelection, ev: EffectiveVerdicts) -> str:
     """Return judge_audit.md content with empty human columns."""
     lines = [
         "# Judge audit",
         "",
         f"Run: {Path(run_dir).as_posix()}",
         f"Judge: {ev.judge_model}, prompt version {ev.prompt_version} ({ev.source})",
+        "",
+        f"Selection: {len(sel.drawn)} items drawn per category with seed {sel.seed}, plus every",
+        f"other judged item with judge correctness below {sel.add_below} (stratification by",
+        "judge score, not a redraw), flagged in the selection column.",
         "",
         "Fill the three human columns. correctness: 2 = agrees with the reference on every",
         "key fact with the right API names; 1 = partly correct or incomplete, nothing",
@@ -79,16 +117,17 @@ def render_audit(run_dir: Path, items: list[EvalRecord], ev: EffectiveVerdicts) 
         "excerpts (used in M09 to sanity-check RAGAS faithfulness).",
         "",
         TABLE_HEADER,
-        "|---|---|---|---|---|---|---|---|",
+        "|---" * N_COLUMNS + "|",
     ]
-    for n, r in enumerate(items, start=1):
+    for n, (r, label) in enumerate(sel.rows(), start=1):
         v = ev.verdicts[r.id]
         lines.append(
-            f"| {n} | {r.id} | {r.category} | {v.correctness} | {v.citation_support} |  |  |  |"
+            f"| {n} | {r.id} | {r.category} | {label} | {v.correctness} "
+            f"| {v.citation_support} |  |  |  |"
         )
     lines.append("")
-    for n, r in enumerate(items, start=1):
-        lines += _item_section(n, r, ev)
+    for n, (r, label) in enumerate(sel.rows(), start=1):
+        lines += _item_section(n, r, ev, label)
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -120,8 +159,8 @@ def parse_audit_table(markdown: str) -> dict[str, HumanLabel]:
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) != N_COLUMNS:
             continue
-        faithful = cells[7].lower() or None
-        labels[cells[1]] = HumanLabel(_cell_int(cells[5]), _cell_int(cells[6]), faithful)
+        faithful = cells[8].lower() or None
+        labels[cells[1]] = HumanLabel(_cell_int(cells[6]), _cell_int(cells[7]), faithful)
     return labels
 
 
@@ -137,16 +176,26 @@ def has_human_labels(path: Path) -> bool:
 
 
 def write_audit(
-    run_dir: Path, out_path: Path, seed: int, strata: dict[str, int], force: bool = False
-) -> list[str]:
-    """Write the audit file and return the audited ids; never overwrites human labels."""
+    run_dir: Path,
+    out_path: Path,
+    seed: int,
+    strata: dict[str, int],
+    force: bool = False,
+    add_below: int = 0,
+) -> AuditSelection:
+    """Write the audit file and return the selection; never overwrites human labels.
+
+    add_below = 0 adds nothing (correctness is never below 0).
+    """
     if has_human_labels(out_path) and not force:
         raise FileExistsError(f"{out_path} already has human labels; use --force to overwrite")
     records = load_records(run_dir)
     ev = effective_verdicts(run_dir, records)
-    items = select_audit_items(records, ev, seed, strata)
-    write_text(out_path, render_audit(run_dir, items, ev))
-    return [r.id for r in items]
+    drawn = select_audit_items(records, ev, seed, strata)
+    added = select_low_score_items(records, ev, {r.id for r in drawn}, add_below)
+    sel = AuditSelection(seed, drawn, added, add_below)
+    write_text(out_path, render_audit(run_dir, sel, ev))
+    return sel
 
 
 @dataclass
@@ -158,6 +207,15 @@ class AuditScore:
     citation_agree: int
     unlabelled: list[str]
     disagreements: list[str]
+
+    def needed(self, rate: float) -> int:
+        """Agreements needed on each column for the gate: ceil(rate x n)."""
+        return math.ceil(round(rate * self.n, 9))
+
+    def passes(self, rate: float) -> bool:
+        """True when both columns reach the gate."""
+        need = self.needed(rate)
+        return self.correctness_agree >= need and self.citation_agree >= need
 
 
 def score_audit(run_dir: Path, audit_path: Path) -> AuditScore:

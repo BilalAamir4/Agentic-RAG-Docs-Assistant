@@ -150,25 +150,45 @@ def _judge_with(run_dir: Path, tmp_path: Path, verdict: JudgeVerdict) -> None:
 
 def test_judge_audit_write_parse_score(judged_run: Path, tmp_path: Path) -> None:
     audit = tmp_path / "judge_audit.md"
-    ids = write_audit(judged_run, audit, seed=21, strata={"single": 1, "multi": 1})
-    assert ids == ["q001", "q002"]
+    sel = write_audit(judged_run, audit, seed=21, strata={"single": 1, "multi": 1})
+    assert [r.id for r in sel.drawn] == ["q001", "q002"] and sel.added == []
     text = read_text(audit)
-    assert "| 1 | q001 | single | 2 | 1 |  |  |  |" in text
+    row1 = "| 1 | q001 | single | seed 21 | 2 | 1 |"
+    row2 = "| 2 | q002 | multi | seed 21 | 2 | 1 |"
+    assert f"{row1}  |  |  |" in text
     assert "[2] CITED Title 2 > H2" in text
-    filled = text.replace(
-        "| 1 | q001 | single | 2 | 1 |  |  |  |", "| 1 | q001 | single | 2 | 1 | 2 | 1 | yes |"
-    )
-    filled = filled.replace(
-        "| 2 | q002 | multi | 2 | 1 |  |  |  |", "| 2 | q002 | multi | 2 | 1 | 1 | 1 | no |"
-    )
+    filled = text.replace(f"{row1}  |  |  |", f"{row1} 2 | 1 | yes |")
+    filled = filled.replace(f"{row2}  |  |  |", f"{row2} 1 | 1 | no |")
     write_text(audit, filled)
     labels = parse_audit_table(read_text(audit))
     assert labels["q002"].correctness == 1 and labels["q002"].faithful == "no"
     score = score_audit(judged_run, audit)
     assert (score.n, score.correctness_agree, score.citation_agree) == (2, 1, 2)
     assert len(score.disagreements) == 1
+    assert score.needed(0.8) == 2 and not score.passes(0.8) and score.passes(0.5)
     with pytest.raises(FileExistsError):
         write_audit(judged_run, audit, seed=21, strata={"single": 1, "multi": 1})
+
+
+def test_judge_audit_adds_low_score_items_after_the_draw(judged_run: Path, tmp_path: Path) -> None:
+    """q002 judged 1 is added (flagged) after the seeded draw; a drawn item is not repeated."""
+    for item_id, correctness in (("q001", 2), ("q002", 1)):
+        rec = JudgeRecord(
+            id=item_id,
+            verdict=JudgeVerdict(correctness=correctness, citation_support=1, rationale="v2"),
+            judge_model="gemini-3.5-flash-lite",
+            judge_prompt_version=2,
+        )
+        append_jsonl(judged_run / "judge_v2.jsonl", rec.model_dump(mode="json"))
+    audit = tmp_path / "judge_audit.md"
+    sel = write_audit(judged_run, audit, seed=21, strata={"single": 1}, add_below=2)
+    assert [r.id for r in sel.drawn] == ["q001"] and [r.id for r in sel.added] == ["q002"]
+    text = read_text(audit)
+    assert "| 2 | q002 | multi | added: judge score < 2 | 1 | 1 |  |  |  |" in text
+    assert "## 2. q002 (multi; added: judge score < 2)" in text
+    assert set(parse_audit_table(text)) == {"q001", "q002"}
+    sel = write_audit(judged_run, audit, seed=21, strata={"multi": 1}, add_below=2, force=True)
+    assert [r.id for r in sel.drawn] == ["q002"] and sel.added == []
 
 
 def test_judge_audit_needs_enough_items(judged_run: Path, tmp_path: Path) -> None:
