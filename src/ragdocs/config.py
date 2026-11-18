@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # Judge (M08, D7/D9): gemini-3.5-flash-lite, structured_output True in
     # langchain-google-genai 4.4.1 data/_profiles.py; verified by a live call.
     judge_model: str | None = "gemini-3.5-flash-lite"
-    judge_prompt_version: int = 1
+    judge_prompt_version: int = 2
     embedding_model: str = "gemini-embedding-001"
     rerank_model: str = "rerank-v3.5"
     use_reranker: bool = False

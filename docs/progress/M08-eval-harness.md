@@ -189,6 +189,16 @@ Judge audit
   - Run 0919 (for comparison): q024 (inline [1][3]; rationale says the cited excerpts do not support the claim), q034 (inline [1][2] and [4]; rationale says [4] does not support the decorator usage), q025 (no inline markers; rationale only about the wrong ValidationError claim). None of these is marker-driven by its rationale.
   - So 1 of 39 judged items in the run of record (q006) is a marker-driven citation error.
 
+Judge prompt v2 (human, 2026-11-18, D9 update)
+- src/ragdocs/eval/prompts.py: JUDGE_PROMPT adds, under citation_support: "The CITED / NOT CITED flags on the excerpts are the answer's citations. Inline [n] markers in the answer text are optional: their presence, absence or placement must not affect citation_support." Nothing else in the rubric changed. src/ragdocs/config.py: judge_prompt_version = 2. tests/test_config.py expects 2; tests/eval_fakes.py pins version 1 for fixtures; tests/test_eval_runner.py bumps relative to the setting.
+- Lint and test after the change: "All checks passed!", "115 files already formatted"; "144 passed, 1 deselected in 7.48s".
+- `py tasks.py budget --need gemini-3.5-flash-lite=100000:39`: 0/500 requests used, "fits".
+- `py tasks.py judge --run-dir results/runs/baseline-20261116-1050`: "Judge v2: 0 done, 39 to judge", "Judging complete", exit 0; 39 calls, 88,544 tokens (v1: 86,848). Answers not regenerated.
+- v1 vs v2 verdicts: 39 ids in both; one change, q006 (2, 0) to (2, 1), v2 rationale "... supported by excerpt 2."
+- `py tasks.py judge-audit --run-dir results/runs/baseline-20261116-1050 --score` with the unchanged human labels: "correctness agreement: 10/11", "citation_support agreement: 11/11", "gate (80% on each column, 9/11): PASS", "disagreement q031: correctness judge 2 / human 1; citation_support judge 1 / human 1".
+- results/summary.md regenerated (`py tasks.py compare results/runs/baseline-20261116-1050`): judge prompt version 2; correct 0.905 (38/42); citation_support 1.000 (39/39).
+- Known limitation: run 0919 keeps only judge_v1.jsonl; comparing it with run 1050 now fails the judge-version guard. It is evidence for D23, not a comparison base.
+
 Decisions made
 - Judge model and Groq TPD budget: see D7 updates.
 - Judging decoupled from generation (human decision): see D9 update. per_question.jsonl keeps a `verdict` field that is always None; the verdict lives in judge_v<N>.jsonl.
@@ -356,10 +366,9 @@ Proposed follow-ups (out of scope)
 - Cache query embeddings at runtime (or in the eval only) so resumed or repeated runs do not re-embed; this touches retrieval, so it needs a decision.
 - `.env.example` has `RAGDOCS_ENV=` empty (carried over from M07).
 - Groq tool_use_failed: try `with_structured_output(AnswerDraft, method="json_schema", strict=True)` for gpt-oss models (Groq lists gpt-oss-120b under strict json_schema at https://console.groq.com/docs/structured-outputs; langchain-groq 1.1.3 `_STRICT_STRUCTURED_OUTPUT_MODELS`). This changes the pipeline, so it needs its own module and a re-run.
-- Judge prompt version 2: state explicitly that the CITED / NOT CITED flags are the answer's citations and inline [n] markers are not required (D20), to remove the q006-type error. Needs a version bump and a re-judge of every run.
 - Cohere rerank calls are not recorded in cache/budget.json. Not needed now: use_reranker is False, so nothing calls Cohere. Add recording if reranking is turned on.
 
 Prerequisites for the next module
-- Baseline run of record for M09 and later comparisons: results/runs/baseline-20261116-1050 (judge_v1.jsonl). results/summary.md written by `py tasks.py compare results/runs/baseline-20261116-1050`.
+- Baseline run of record for M09 and later comparisons: results/runs/baseline-20261116-1050 (effective judge judge_v2.jsonl, prompt version 2). results/summary.md written by `py tasks.py compare results/runs/baseline-20261116-1050`.
 - M09 can use the faithful column of results/judge_audit.md (no on q016, q033, q024) to sanity-check RAGAS faithfulness.
 - M10 and M11 grader calls on openai/gpt-oss-20b use structured_output_method / structured_output_strict (D23).

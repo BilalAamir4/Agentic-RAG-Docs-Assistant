@@ -31,7 +31,7 @@ def test_settings_defaults_without_env(tmp_path: Path, monkeypatch: pytest.Monke
     assert settings.generator_model == "openai/gpt-oss-120b"
     assert settings.grader_model == "openai/gpt-oss-20b"
     assert settings.judge_model == "gemini-3.5-flash-lite"
-    assert settings.judge_prompt_version == 1
+    assert settings.judge_prompt_version == 2
     assert settings.embedding_model == "gemini-embedding-001"
     assert settings.rerank_model == "rerank-v3.5"
     assert settings.use_reranker is False

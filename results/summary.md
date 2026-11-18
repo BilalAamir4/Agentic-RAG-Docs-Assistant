@@ -1,6 +1,6 @@
 # Run comparison
 
-Judge gemini-3.5-flash-lite, prompt version 1. Rates are rate (count/n); correctness n = every answerable item.
+Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correctness n = every answerable item.
 
 ## Overall
 
@@ -11,7 +11,7 @@ Judge gemini-3.5-flash-lite, prompt version 1. Rates are rate (count/n); correct
 | correct (correctness = 2) | 0.905 (38/42) |
 | correct or partial (correctness >= 1) | 0.929 (39/42) |
 | mean correctness (0-2) | 1.833 (n=42) |
-| citation_support (judged items) | 0.974 (38/39) |
+| citation_support (judged items) | 1.000 (39/39) |
 | context_hit@5 (on contexts given to the generator) | 0.810 (34/42) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.726 (n=42) |
 | mean must_mention coverage | 0.905 (n=42) |
@@ -36,7 +36,7 @@ Judge gemini-3.5-flash-lite, prompt version 1. Rates are rate (count/n); correct
 | correct (correctness = 2) | 0.893 (25/28) |
 | correct or partial (correctness >= 1) | 0.929 (26/28) |
 | mean correctness (0-2) | 1.821 (n=28) |
-| citation_support (judged items) | 0.962 (25/26) |
+| citation_support (judged items) | 1.000 (26/26) |
 | context_hit@5 (on contexts given to the generator) | 0.786 (22/28) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.786 (n=28) |
 | mean must_mention coverage | 0.893 (n=28) |

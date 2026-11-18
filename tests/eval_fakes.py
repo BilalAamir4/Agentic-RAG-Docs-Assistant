@@ -96,6 +96,7 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "results_dir": tmp_path / "results",
         "index_dir": tmp_path / "index",
         "langsmith_tracing": False,
+        "judge_prompt_version": 1,  # fixtures write judge_v1; tests bump explicitly
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

@@ -5,15 +5,15 @@
   "index_manifest_hash": "c4576449f124f646b5908b241f89dd216250a7fc12eb6cbbb94505308cbf512e",
   "tracing_enabled": true,
   "judge": {
-    "effective_prompt_version": 1,
+    "effective_prompt_version": 2,
     "judge_model": "gemini-3.5-flash-lite",
-    "source": "judge_v1.jsonl",
+    "source": "judge_v2.jsonl",
     "eligible_n": 39,
     "judged_n": 39,
     "complete": true,
     "usage": {
-      "tokens_in": 84398,
-      "tokens_out": 2450,
+      "tokens_in": 86114,
+      "tokens_out": 2430,
       "calls": 39,
       "cached": 0
     }
@@ -37,9 +37,9 @@
       "n": 42
     },
     "citation_support": {
-      "count": 38,
+      "count": 39,
       "n": 39,
-      "rate": 0.9743589743589743
+      "rate": 1.0
     },
     "context_hit@5": {
       "count": 34.0,
@@ -119,9 +119,9 @@
         "n": 28
       },
       "citation_support": {
-        "count": 25,
+        "count": 26,
         "n": 26,
-        "rate": 0.9615384615384616
+        "rate": 1.0
       },
       "context_hit@5": {
         "count": 22.0,

@@ -215,7 +215,7 @@ def test_judge_cache_avoids_second_call(tmp_path: Path) -> None:
     judge_item(record, llm=llm, cache=cache, settings=settings)
     judge_item(record, llm=llm, cache=cache, settings=settings)
     assert len(llm.calls) == 1
-    bumped = make_settings(tmp_path, judge_prompt_version=2)
+    bumped = make_settings(tmp_path, judge_prompt_version=settings.judge_prompt_version + 1)
     assert judge_cache_key(record, settings) != judge_cache_key(record, bumped)
 
 

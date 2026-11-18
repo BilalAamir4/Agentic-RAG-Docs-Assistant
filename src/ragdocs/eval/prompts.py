@@ -2,6 +2,8 @@
 
 JUDGE_PROMPT is versioned by Settings.judge_prompt_version. Any change needs a version
 bump and a re-judge (judge_v<N>.jsonl), see docs/DECISIONS.md D9.
+Version 2 (M08): the CITED flags are the citations; inline [n] markers do not affect
+citation_support (D20).
 """
 
 from ragdocs.schemas import JUDGE_RATIONALE_MAX_WORDS
@@ -22,6 +24,7 @@ correctness (0, 1 or 2):
 citation_support (0 or 1):
 - 1 = every cited excerpt supports at least one claim in the answer AND no central claim lacks a cited excerpt;
 - 0 otherwise.
+The CITED / NOT CITED flags on the excerpts are the answer's citations. Inline [n] markers in the answer text are optional: their presence, absence or placement must not affect citation_support.
 
 Judge correctness against the reference answer, not against your own knowledge of LangGraph. A missing must_mention identifier is a hint that the answer may be incomplete, not an automatic penalty. Judge citation_support using only the CITED excerpts; NOT CITED excerpts never count as support.
 
