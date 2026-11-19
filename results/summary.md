@@ -14,7 +14,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | citation_support (judged items) | 1.000 (39/39) |
 | context_hit@5 (on contexts given to the generator) | 0.810 (34/42) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.726 (n=42) |
-| mean must_mention coverage | 0.905 (n=42) |
+| mean must_mention coverage (soft signal, D15) | 0.905 (n=42) |
 | false_abstention | 0.071 (3/42) |
 | abstention_correct (unanswerable) | 1.000 (8/8) |
 | hallucinated (unanswerable) | 0.000 (0/8) |
@@ -26,6 +26,10 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | structured_output_failures (failed attempts before success) | 0 (n=50) |
 | items with >= 1 structured_output failure | 0.000 (0/50) |
 | rate-limited attempts (not counted above) | 10 (n=50) |
+| RAGAS faithfulness (prose-level grounding signal) | 0.922 (39) |
+| RAGAS response_relevancy | 0.813 (39) |
+| RAGAS context_precision (on contexts given to the generator) | 0.720 (42) |
+| RAGAS context_recall (on contexts given to the generator) | 0.845 (42) |
 
 ## single
 
@@ -39,7 +43,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | citation_support (judged items) | 1.000 (26/26) |
 | context_hit@5 (on contexts given to the generator) | 0.786 (22/28) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.786 (n=28) |
-| mean must_mention coverage | 0.893 (n=28) |
+| mean must_mention coverage (soft signal, D15) | 0.893 (n=28) |
 | false_abstention | 0.071 (2/28) |
 | abstention_correct (unanswerable) | - |
 | hallucinated (unanswerable) | - |
@@ -51,6 +55,10 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | structured_output_failures (failed attempts before success) | 0 (n=28) |
 | items with >= 1 structured_output failure | 0.000 (0/28) |
 | rate-limited attempts (not counted above) | 10 (n=28) |
+| RAGAS faithfulness (prose-level grounding signal) | 0.908 (26) |
+| RAGAS response_relevancy | 0.818 (26) |
+| RAGAS context_precision (on contexts given to the generator) | 0.772 (28) |
+| RAGAS context_recall (on contexts given to the generator) | 0.857 (28) |
 
 ## multi
 
@@ -64,7 +72,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | citation_support (judged items) | 1.000 (7/7) |
 | context_hit@5 (on contexts given to the generator) | 0.875 (7/8) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.500 (n=8) |
-| mean must_mention coverage | 0.875 (n=8) |
+| mean must_mention coverage (soft signal, D15) | 0.875 (n=8) |
 | false_abstention | 0.125 (1/8) |
 | abstention_correct (unanswerable) | - |
 | hallucinated (unanswerable) | - |
@@ -76,6 +84,10 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | structured_output_failures (failed attempts before success) | 0 (n=8) |
 | items with >= 1 structured_output failure | 0.000 (0/8) |
 | rate-limited attempts (not counted above) | 0 (n=8) |
+| RAGAS faithfulness (prose-level grounding signal) | 0.907 (7) |
+| RAGAS response_relevancy | 0.817 (7) |
+| RAGAS context_precision (on contexts given to the generator) | 0.479 (8) |
+| RAGAS context_recall (on contexts given to the generator) | 0.688 (8) |
 
 ## version
 
@@ -89,7 +101,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | citation_support (judged items) | 1.000 (6/6) |
 | context_hit@5 (on contexts given to the generator) | 0.833 (5/6) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.750 (n=6) |
-| mean must_mention coverage | 1.000 (n=6) |
+| mean must_mention coverage (soft signal, D15) | 1.000 (n=6) |
 | false_abstention | 0.000 (0/6) |
 | abstention_correct (unanswerable) | - |
 | hallucinated (unanswerable) | - |
@@ -101,6 +113,10 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | structured_output_failures (failed attempts before success) | 0 (n=6) |
 | items with >= 1 structured_output failure | 0.000 (0/6) |
 | rate-limited attempts (not counted above) | 0 (n=6) |
+| RAGAS faithfulness (prose-level grounding signal) | 1.000 (6) |
+| RAGAS response_relevancy | 0.784 (6) |
+| RAGAS context_precision (on contexts given to the generator) | 0.798 (6) |
+| RAGAS context_recall (on contexts given to the generator) | 1.000 (6) |
 
 ## unanswerable
 
@@ -114,7 +130,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | citation_support (judged items) | - |
 | context_hit@5 (on contexts given to the generator) | - |
 | mean context_evidence_recall@5 (on contexts given to the generator) | - |
-| mean must_mention coverage | - |
+| mean must_mention coverage (soft signal, D15) | - |
 | false_abstention | - |
 | abstention_correct (unanswerable) | 1.000 (8/8) |
 | hallucinated (unanswerable) | 0.000 (0/8) |
@@ -126,7 +142,17 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | structured_output_failures (failed attempts before success) | 0 (n=8) |
 | items with >= 1 structured_output failure | 0.000 (0/8) |
 | rate-limited attempts (not counted above) | 0 (n=8) |
+| RAGAS faithfulness (prose-level grounding signal) | - |
+| RAGAS response_relevancy | - |
+| RAGAS context_precision (on contexts given to the generator) | - |
+| RAGAS context_recall (on contexts given to the generator) | - |
 
 ## Changed questions (against baseline-20261116-1050)
+
+- only one run given
+
+## Paired
+
+Means over items scored in every compared run (n). A paired item is better or worse when the difference exceeds 0.2; the verdict is "no measurable difference" unless wins minus losses is 3 or more (D19).
 
 - only one run given

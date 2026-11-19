@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr | None = None
     langsmith_tracing: bool = False
     langsmith_project: str = "ragdocs-local"
+    # M09: LangSmith dataset holding the frozen eval set (experiments attach to it).
+    langsmith_dataset_name: str = "ragdocs-eval-set-v1"
     langsmith_endpoint: str | None = None
     langsmith_sampling_rate: float = Field(
         default=1.0,
@@ -112,6 +114,41 @@ class Settings(BaseSettings):
     embedding_rpm_limit: int = 100
     embedding_rpd_limit: int = 1000
     embedding_quota_timezone: str = "America/Los_Angeles"
+    # RAGAS scorer (M09, D19): runs in .venv-ragas via tools/ragas_score.py. The LLM is a
+    # different Gemini model from the judge so each has its own daily quota (D7).
+    ragas_llm_model: str = "gemini-3.1-flash-lite"
+    ragas_llm_rpm_limit: int = 15
+    ragas_llm_tpm_limit: int = 250000
+    ragas_llm_rpd_limit: int = 500
+    ragas_llm_quota_timezone: str = "America/Los_Angeles"
+    # None means embedding_model; embedding limits are shared (embedding_* above).
+    ragas_embedding_model: str | None = None
+    ragas_response_relevancy_strictness: int = 3
+    # Total attempts per LLM or embedding call (ragas RunConfig); the chat model's own
+    # retries are off so every attempt passes the budget recorder.
+    ragas_max_attempts: int = 3
+    ragas_timeout_s: int = 180
+    # Ceiling on requests per minute for the RAGAS LLM and embeddings, applied before
+    # every call (human decision after the day-1 bursts of 16 per minute, D19).
+    ragas_rpm_ceiling: int = 12
+    # LLM calls and embedding requests per scored item and metric, used for the budget
+    # plan and the per-item daily check. From day 1 (2026-11-18, cached successes on 13
+    # or 14 items, retries included; mean / max): faithfulness 2.46 / 6, response_relevancy
+    # 4.67 / 6, context_precision 6.42 / 9, context_recall 1.46 / 3. 48 more requests went
+    # to 10 errored metrics. Values: means rounded up, response_relevancy at its maximum.
+    ragas_llm_calls_per_metric: dict[str, int] = Field(
+        default_factory=lambda: {
+            "faithfulness": 3,
+            "response_relevancy": 6,
+            "context_precision": 7,
+            "context_recall": 2,
+        }
+    )
+    ragas_embedding_requests_per_metric: dict[str, int] = Field(
+        default_factory=lambda: {"response_relevancy": 2}
+    )
+    ragas_tokens_per_llm_call: int = 2500
+    ragas_venv_dir: Path = Field(default_factory=lambda: REPO_ROOT / ".venv-ragas")
     throttle_safety: float = Field(default=0.9, gt=0.0, le=1.0)
     throttle_window_s: float = 60.0
     eval_initial_token_estimate: int = 3000
@@ -127,6 +164,11 @@ class Settings(BaseSettings):
     # column over all audited items.
     eval_audit_add_below_correctness: int = 2
     eval_audit_gate_rate: float = Field(default=0.8, gt=0.0, le=1.0)
+    # D19 noise rule for paired comparisons (M09): a paired item is a win or loss when
+    # the difference exceeds the threshold; a direction is reported only when wins minus
+    # losses (or losses minus wins) reaches the margin.
+    compare_paired_threshold: float = 0.2
+    compare_noise_margin: int = 3
     eval_set_sha256: str = "316b1d683050e426ad5bf2324b9ca7211d30ea2566276320489e6acb538a470f"
     eval_set_tag: str = "eval-set-v1"
 

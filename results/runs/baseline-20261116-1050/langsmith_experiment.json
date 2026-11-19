@@ -1,0 +1,22 @@
+{
+  "uploads": [
+    {
+      "name": "baseline-20261116-1050",
+      "id": "6d6f057c-dba0-478b-a08b-c18f78167681",
+      "url": "https://smith.langchain.com/o/dc790a75-743f-467d-a940-18bb085de125/datasets/6f229f5d-8cff-45b9-840f-3ec576feb329/compare?selectedSessions=6d6f057c-dba0-478b-a08b-c18f78167681",
+      "dataset_id": "6f229f5d-8cff-45b9-840f-3ec576feb329",
+      "examples": 50,
+      "date": "2026-11-19T21:45:03+00:00",
+      "current": false
+    },
+    {
+      "name": "baseline-20261116-1050-r1",
+      "id": "587a3e7e-0328-432d-b0d6-a9dbc8d7c990",
+      "url": "https://smith.langchain.com/o/dc790a75-743f-467d-a940-18bb085de125/datasets/6f229f5d-8cff-45b9-840f-3ec576feb329/compare?selectedSessions=587a3e7e-0328-432d-b0d6-a9dbc8d7c990",
+      "dataset_id": "6f229f5d-8cff-45b9-840f-3ec576feb329",
+      "examples": 50,
+      "date": "2026-11-19T21:46:14+00:00",
+      "current": true
+    }
+  ]
+}

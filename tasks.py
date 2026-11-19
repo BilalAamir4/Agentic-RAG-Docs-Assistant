@@ -15,6 +15,10 @@ Commands:
   judge-audit     Write or score the judge hand audit: judge-audit --run-dir DIR [--score] [--force]
   compare         Compare runs into results/summary.md: compare RUN_DIR [RUN_DIR ...]
   budget          Show trailing-window API usage per model: budget [--need MODEL=TOKENS[:REQUESTS]]
+  ragas-setup     Create .venv-ragas from requirements-ragas.txt (M09, D19 path A)
+  ragas           RAGAS in .venv-ragas: ragas --run-dir DIR [--plan-only|--cache-check]
+  ls-dataset      Create or verify the LangSmith dataset ragdocs-eval-set-v1 (M09)
+  experiment      Upload a run as a LangSmith experiment: experiment --run-dir DIR [--replace]
   validate-eval       Validate evaluation dataset format (added in M03)
   verify-sources      Verify source quotes against live page snapshots (added in M03)
   check-unanswerable  Check keyword absence for unanswerable items
@@ -241,6 +245,56 @@ def cmd_judge(args: argparse.Namespace, extra_args: list[str]) -> int:
     return run_command(cmd + extra_args)
 
 
+def cmd_ragas_setup(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Create .venv-ragas from requirements-ragas.txt (isolated RAGAS scorer, D19)."""
+    if sys.version_info[:2] != (3, 12):
+        print("Run: py -3.12 tasks.py ragas-setup", file=sys.stderr)
+        return 1
+    venv_dir = REPO_ROOT / ".venv-ragas"
+    print(f"Creating virtual environment in {venv_dir}...")
+    venv.create(venv_dir, with_pip=True)
+    sub = "Scripts" if sys.platform == "win32" else "bin"
+    py = venv_dir / sub / ("python.exe" if sys.platform == "win32" else "python")
+    rc = run_command([str(py), "-m", "pip", "install", "--upgrade", "pip"])
+    if rc != 0:
+        return rc
+    req = REPO_ROOT / "requirements-ragas.txt"
+    return run_command([str(py), "-m", "pip", "install", "-r", str(req)] + extra_args)
+
+
+def cmd_ragas(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Export ragas_input.jsonl and score it in .venv-ragas."""
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "ragas_run.py"), "--run-dir", args.run_dir]
+    if args.out_dir:
+        cmd += ["--out-dir", args.out_dir]
+    if args.ids:
+        cmd += ["--ids", args.ids]
+    if args.plan_only:
+        cmd.append("--plan-only")
+    if args.cache_check:
+        cmd.append("--cache-check")
+    if args.refresh:
+        cmd.append("--refresh")
+    if args.faithfulness_audit:
+        cmd.append("--faithfulness-audit")
+    return run_command(cmd + extra_args)
+
+
+def cmd_ls_dataset(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Create or verify the LangSmith dataset ragdocs-eval-set-v1."""
+    py = ensure_venv_exists()
+    return run_command([str(py), str(REPO_ROOT / "scripts" / "langsmith_sync.py"), "ls-dataset"])
+
+
+def cmd_experiment(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Upload a run folder as a LangSmith experiment (replay, no LLM calls)."""
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "langsmith_sync.py"), "experiment"]
+    cmd += ["--run-dir", args.run_dir] + (["--replace"] if args.replace else [])
+    return run_command(cmd + extra_args)
+
+
 def cmd_judge_audit(args: argparse.Namespace, extra_args: list[str]) -> int:
     py = ensure_venv_exists()
     cmd = [str(py), str(REPO_ROOT / "scripts" / "judge_audit.py"), "--run-dir", args.run_dir]
@@ -358,6 +412,25 @@ def main() -> int:
     judge_parser = subparsers.add_parser("judge", help="Judge stored answers of a run")
     judge_parser.add_argument("--run-dir", required=True, help="Run folder")
 
+    subparsers.add_parser("ragas-setup", help="Create .venv-ragas from requirements-ragas.txt")
+    ragas_parser = subparsers.add_parser("ragas", help="Score a run with RAGAS (.venv-ragas)")
+    ragas_parser.add_argument("--run-dir", required=True, help="Run folder")
+    ragas_parser.add_argument("--out-dir", required=False, help="Output folder (default run)")
+    ragas_parser.add_argument("--ids", required=False, help="Comma-separated ids (smoke)")
+    ragas_parser.add_argument("--plan-only", action="store_true", help="Print budget plan only")
+    ragas_parser.add_argument(
+        "--cache-check", action="store_true", help="Report cache hits; no API calls"
+    )
+    ragas_parser.add_argument("--refresh", action="store_true", help="Rescore --ids (probe)")
+    ragas_parser.add_argument(
+        "--faithfulness-audit", action="store_true", help="Log faithfulness steps for --ids"
+    )
+
+    subparsers.add_parser("ls-dataset", help="Create or verify the LangSmith dataset")
+    exp_parser = subparsers.add_parser("experiment", help="Upload a run as an experiment")
+    exp_parser.add_argument("--run-dir", required=True, help="Run folder")
+    exp_parser.add_argument("--replace", action="store_true", help="Upload a new -r<N> copy")
+
     audit_parser = subparsers.add_parser("judge-audit", help="Write or score the judge audit")
     audit_parser.add_argument("--run-dir", required=True, help="Run folder")
     audit_parser.add_argument("--score", action="store_true", help="Score human labels")
@@ -402,6 +475,10 @@ def main() -> int:
         "eval": cmd_eval,
         "judge": cmd_judge,
         "judge-audit": cmd_judge_audit,
+        "ragas-setup": cmd_ragas_setup,
+        "ragas": cmd_ragas,
+        "ls-dataset": cmd_ls_dataset,
+        "experiment": cmd_experiment,
         "compare": cmd_compare,
         "budget": cmd_budget,
         "validate-eval": cmd_validate_eval,

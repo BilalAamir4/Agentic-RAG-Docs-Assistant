@@ -3,8 +3,9 @@
 Verdicts come from the highest judge_v<N>.jsonl present (else per_question.jsonl),
 see ragdocs.eval.scoring.effective_verdicts. Correctness fields use n = every
 answerable item and count a false abstention as correctness 0, so a pipeline that
-abstains more cannot look more accurate. M09 can merge extra per-item score files
-through `extra_score_files` without changing the fixed fields.
+abstains more cannot look more accurate. When the run folder has ragas_summary.json
+(M09), the four RAGAS metrics are added as "mean (n)" rows; n is the number of
+eligible items scored (errored and NaN items excluded).
 """
 
 from collections.abc import Sequence
@@ -20,6 +21,15 @@ from ragdocs.schemas import EvalRecord
 
 CATEGORIES = ("single", "multi", "version", "unanswerable")
 CONTEXT_LABEL = "on contexts given to the generator"
+RAGAS_SUMMARY_FILE = "ragas_summary.json"
+RAGAS_METRICS = ("faithfulness", "response_relevancy", "context_precision", "context_recall")
+# Row label, key, formatter kind for the RAGAS rows (D22 label on the context metrics).
+RAGAS_ROWS: list[tuple[str, str, str]] = [
+    ("RAGAS faithfulness (prose-level grounding signal)", "ragas_faithfulness", "ragas"),
+    ("RAGAS response_relevancy", "ragas_response_relevancy", "ragas"),
+    (f"RAGAS context_precision ({CONTEXT_LABEL})", "ragas_context_precision", "ragas"),
+    (f"RAGAS context_recall ({CONTEXT_LABEL})", "ragas_context_recall", "ragas"),
+]
 
 
 def rate(count: int | float, n: int) -> dict[str, Any]:
@@ -187,6 +197,33 @@ def _extra_scores(records: list[EvalRecord], files: Sequence[Path]) -> dict[str,
     return extra
 
 
+def _merge_ragas(run_dir: Path, summary: dict[str, Any]) -> None:
+    """Add ragas_<metric> {"mean", "n", "errored"} fields from ragas_summary.json, if present."""
+    path = run_dir / RAGAS_SUMMARY_FILE
+    if not path.is_file():
+        return
+    ragas = read_json(path)
+    for m in RAGAS_METRICS:
+        s = ragas["metrics"][m]
+        summary["overall"][f"ragas_{m}"] = {
+            "mean": s["mean"],
+            "n": s["n_scored"],
+            "errored": s["n_errored"],
+        }
+        for cat, per in ragas["per_category"].items():
+            if m in per and cat in summary["per_category"]:
+                summary["per_category"][cat][f"ragas_{m}"] = {
+                    "mean": per[m]["mean"],
+                    "n": per[m]["n_scored"],
+                }
+    summary["has_ragas"] = True
+
+
+def rows_for(summaries: Sequence[dict[str, Any]]) -> list[tuple[str, str, str]]:
+    """SUMMARY_ROWS plus RAGAS_ROWS when any summary has RAGAS scores."""
+    return SUMMARY_ROWS + (RAGAS_ROWS if any(s.get("has_ragas") for s in summaries) else [])
+
+
 def summarize(run_dir: Path, extra_score_files: Sequence[Path] = ()) -> dict[str, Any]:
     """Return the summary dict for a run folder."""
     run_dir = Path(run_dir)
@@ -207,6 +244,7 @@ def summarize(run_dir: Path, extra_score_files: Sequence[Path] = ()) -> dict[str
         },
         "totals": _totals(records),
     }
+    _merge_ragas(run_dir, summary)
     if extra_score_files:
         summary["extra"] = _extra_scores(records, extra_score_files)
     return summary
@@ -222,7 +260,7 @@ SUMMARY_ROWS: list[tuple[str, str, str]] = [
     ("citation_support (judged items)", "citation_support", "rate"),
     (f"context_hit@5 ({CONTEXT_LABEL})", "context_hit@5", "rate"),
     (f"mean context_evidence_recall@5 ({CONTEXT_LABEL})", "context_evidence_recall@5", "mean"),
-    ("mean must_mention coverage", "must_mention_coverage", "mean"),
+    ("mean must_mention coverage (soft signal, D15)", "must_mention_coverage", "mean"),
     ("false_abstention", "false_abstention", "rate"),
     ("abstention_correct (unanswerable)", "abstention_correct", "rate"),
     ("hallucinated (unanswerable)", "hallucinated", "rate"),
@@ -258,6 +296,8 @@ def format_cell(metrics: dict[str, Any], key: str, kind: str) -> str:
         return f"{value:.0f} ms"
     if kind == "total":
         return f"{value['total']} (n={value['n']})" if value["n"] else "-"
+    if kind == "ragas":
+        return "-" if value["mean"] is None else f"{value['mean']:.3f} ({value['n']})"
     return str(value)
 
 
@@ -278,11 +318,11 @@ def _judge_lines(judge: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _category_table(per_category: dict[str, Any]) -> list[str]:
+def _category_table(per_category: dict[str, Any], rows: list[tuple[str, str, str]]) -> list[str]:
     """Markdown table with one column per category."""
     header = "| Field | " + " | ".join(CATEGORIES) + " |"
     lines = [header, "|---|" + "---|" * len(CATEGORIES)]
-    for label, key, kind in SUMMARY_ROWS:
+    for label, key, kind in rows:
         cells = [format_cell(per_category[c], key, kind) for c in CATEGORIES]
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
     return lines
@@ -300,9 +340,10 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "a false abstention counts as correctness 0.",
         "",
     ]
+    rows = rows_for([summary])
     lines += ["## Overall", "", "| Field | Value |", "|---|---|"]
-    lines += [f"| {lab} | {format_cell(overall, key, kind)} |" for lab, key, kind in SUMMARY_ROWS]
-    lines += ["", "## Per category", ""] + _category_table(summary["per_category"])
+    lines += [f"| {lab} | {format_cell(overall, key, kind)} |" for lab, key, kind in rows]
+    lines += ["", "## Per category", ""] + _category_table(summary["per_category"], rows)
     lines += ["", "## Totals (generation)", ""]
     lines += [
         f"- Tokens in: {totals['tokens_in']}; tokens out: {totals['tokens_out']}; "

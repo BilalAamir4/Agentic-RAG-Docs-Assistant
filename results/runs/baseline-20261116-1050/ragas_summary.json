@@ -1,0 +1,84 @@
+{
+  "metrics": {
+    "faithfulness": {
+      "mean": 0.921891783430245,
+      "n_eligible": 39,
+      "n_scored": 39,
+      "n_errored": 0
+    },
+    "response_relevancy": {
+      "mean": 0.8128470928487644,
+      "n_eligible": 39,
+      "n_scored": 39,
+      "n_errored": 0
+    },
+    "context_precision": {
+      "mean": 0.7200066137219844,
+      "n_eligible": 42,
+      "n_scored": 42,
+      "n_errored": 0
+    },
+    "context_recall": {
+      "mean": 0.8452380952380952,
+      "n_eligible": 42,
+      "n_scored": 42,
+      "n_errored": 0
+    }
+  },
+  "per_category": {
+    "multi": {
+      "faithfulness": {
+        "mean": 0.9065141207998352,
+        "n_scored": 7
+      },
+      "response_relevancy": {
+        "mean": 0.8174074457307775,
+        "n_scored": 7
+      },
+      "context_precision": {
+        "mean": 0.4791666666333333,
+        "n_scored": 8
+      },
+      "context_recall": {
+        "mean": 0.6875,
+        "n_scored": 8
+      }
+    },
+    "single": {
+      "faithfulness": {
+        "mean": 0.9080069503146426,
+        "n_scored": 26
+      },
+      "response_relevancy": {
+        "mean": 0.8183446949540772,
+        "n_scored": 26
+      },
+      "context_precision": {
+        "mean": 0.7721230158352819,
+        "n_scored": 28
+      },
+      "context_recall": {
+        "mean": 0.8571428571428571,
+        "n_scored": 28
+      }
+    },
+    "version": {
+      "faithfulness": {
+        "mean": 1.0,
+        "n_scored": 6
+      },
+      "response_relevancy": {
+        "mean": 0.7837037386967278,
+        "n_scored": 6
+      },
+      "context_precision": {
+        "mean": 0.7979166666447974,
+        "n_scored": 6
+      },
+      "context_recall": {
+        "mean": 1.0,
+        "n_scored": 6
+      }
+    }
+  }
+}

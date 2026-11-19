@@ -387,11 +387,27 @@ def embedding_budget(settings: Any, store: BudgetStore | None) -> RollingBudget:
     )
 
 
+def ragas_llm_budget(settings: Any, store: BudgetStore | None) -> RollingBudget:
+    """Return the RollingBudget for settings.ragas_llm_model (calendar day, Pacific)."""
+    return RollingBudget(
+        str(settings.ragas_llm_model),
+        tokens_per_min=settings.ragas_llm_tpm_limit,
+        requests_per_min=settings.ragas_llm_rpm_limit,
+        requests_per_day=settings.ragas_llm_rpd_limit,
+        safety=settings.throttle_safety,
+        store=store,
+        timezone=settings.ragas_llm_quota_timezone,
+        window_s=settings.throttle_window_s,
+    )
+
+
 def all_budgets(settings: Any, store: BudgetStore | None) -> dict[str, RollingBudget]:
-    """Return budgets for every model with configured limits (Groq, judge, embedding)."""
+    """Return budgets for every model with configured limits (Groq, judge, RAGAS, embedding)."""
     budgets = groq_budgets(settings, store)
     if settings.judge_model:
         budgets[str(settings.judge_model)] = judge_budget(settings, store)
+    if settings.ragas_llm_model:
+        budgets[str(settings.ragas_llm_model)] = ragas_llm_budget(settings, store)
     if settings.embedding_model:
         budgets[str(settings.embedding_model)] = embedding_budget(settings, store)
     return budgets

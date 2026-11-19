@@ -24,6 +24,7 @@ def test_import_boundaries_api_app() -> None:
         "ragdocs.ingest",
         "ragdocs.eval",
         "ragdocs.index.build",
+        "ragas",  # M09: RAGAS lives only in .venv-ragas (D19)
     )
 
     for mod in imported_modules:
