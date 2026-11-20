@@ -1,0 +1,43 @@
+{
+  "ragas_version": "0.4.4",
+  "metric_classes": {
+    "faithfulness": "Faithfulness",
+    "response_relevancy": "ResponseRelevancy",
+    "context_precision": "LLMContextPrecisionWithReference",
+    "context_recall": "LLMContextRecall"
+  },
+  "llm_model": "gemini-3.1-flash-lite",
+  "embedding_model": "gemini-embedding-001",
+  "response_relevancy_strictness": 3,
+  "max_attempts": 3,
+  "input": "results/runs/corrective-20261120-1852/ragas_input.jsonl",
+  "items_scored": 42,
+  "date": "2026-11-20T20:46:09+00:00",
+  "git_commit": "00d3d859e86afb8d4d75083373fa5eaec51f5f95",
+  "measured_calls_per_metric": {
+    "faithfulness": {
+      "items": 39,
+      "llm_calls_per_item": 2.0,
+      "embedding_requests_per_item": 0.0,
+      "embedding_texts_per_request": null
+    },
+    "response_relevancy": {
+      "items": 39,
+      "llm_calls_per_item": 3.0,
+      "embedding_requests_per_item": 0.8974358974358975,
+      "embedding_texts_per_request": 1.6
+    },
+    "context_precision": {
+      "items": 42,
+      "llm_calls_per_item": 3.238095238095238,
+      "embedding_requests_per_item": 0.0,
+      "embedding_texts_per_request": null
+    },
+    "context_recall": {
+      "items": 42,
+      "llm_calls_per_item": 1.0,
+      "embedding_requests_per_item": 0.0,
+      "embedding_texts_per_request": null
+    }
+  }
+}

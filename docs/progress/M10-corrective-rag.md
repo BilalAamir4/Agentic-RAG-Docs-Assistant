@@ -1,6 +1,6 @@
 M10: Corrective RAG
-Status: Partial (S2 of 3 done: corrective graph and pipeline)
-Date: 2026-11-20
+Status: Done (S1, S2 and S3 complete)
+Date: 2026-11-21
 
 Goal
 M10 is split into three sessions. S1 (this file's scope so far): verify every API fact S2 needs, move the URL-to-doc mapping into src/ragdocs/docs_urls.py, add the Tavily provider, add the corrective Settings, report first_retrieval_hit@5 (D22) in report, compare and the LangSmith experiment, and re-upload the baseline experiment. S2: LangGraph state, prompts, nodes, graph, AgenticPipeline, graph tests, smoke traces. S3: full evaluation of the corrective pipeline. No S2 or S3 work was done.
@@ -354,3 +354,447 @@ Handoff to S3
   - Tavily returned the same page three times with a fragment and a query string (now de-duplicated).
   - get_retriever is lru_cached and rejects a Settings argument.
   - The grader and rewriter introduced an identifier that is in neither the question nor the excerpts (see Proposed follow-ups).
+
+---
+
+S3: full evaluation of corrective and comparison with the baseline (2026-11-20)
+
+Module prompt: "M10 (3/3): evaluation", given by the human on 2026-11-20.
+
+S3 Step 0: state check (2026-11-20 18:52Z, before any API call)
+- a) HEAD 00d3d85 "M10 (2/3): corrective graph and pipeline"; git status: only docs/audit/ untracked.
+- b) `py tasks.py lint`: "142 files already formatted", ruff check and format pass. `py tasks.py test`: "243 passed, 1 deselected in 13.79s".
+- c) .env: LANGSMITH_TRACING true; GROQ_API_KEY present, GOOGLE_API_KEY present, TAVILY_API_KEY present, LANGSMITH_API_KEY present.
+- d) Settings.judge_prompt_version = 2. Baseline effective judge_prompt_version = 2 (highest file judge_v2.jsonl; summary.json judge.effective_prompt_version 2; config.json records 1, the setting at generation time). Equal.
+- Baseline current experiment: langsmith_experiment.json marks baseline-20261116-1050-r2 (id ebe73692-136c-4fe9-b310-2484bdc29620) current. The prompt expected r3 or later; there is no r3 entry (the "-r3" in S1 came from a test's copy of the folder). Following the prompt's rule "use the entry marked current", r2 is used.
+- e) `py tasks.py budget` (18:51Z): openai/gpt-oss-120b 0/1000 requests, 0/200,000 tokens; openai/gpt-oss-20b 0/1000, 0/200,000; gemini-3.5-flash-lite (judge) 0/500; gemini-3.1-flash-lite (RAGAS LLM) 0/500; gemini-embedding-001 4/1000 (89 tokens).
+- f) Budget plan (50 items). Sources: S2 smoke (grade about 1,900 to 2,200 tokens, rewrite 534, generate 1,500 to 2,600) and the baseline run (gpt-oss-120b 116,678 tokens over 50 calls, 2,334 per item; judge 88,544 tokens over 39 calls).
+  - openai/gpt-oss-20b (grader, rewriter): best case 50 x 1 grade x 2,100 = 105,000 tokens, 50 requests; worst case 50 x (2 x 2,100 + 534) = 236,700 tokens, 150 requests. Cap at 0.9 = 180,000, bucket drain 2.315 tokens/s: best case 1 day; worst case exceeds the cap by about 57,000 tokens, about 7 h of drain, so within 2 calendar days.
+  - openai/gpt-oss-120b (generator): at most 50 calls; about 50 x 2,600 = 130,000 tokens worst case, 116,700 at the baseline rate; 1 day. Fewer if items abstain on empty web without an LLM call.
+  - Judge gemini-3.5-flash-lite: at most 42 calls (answerable, non-abstained), about 42 x 2,270 = 95,000 tokens; 1 day (cap 450 requests).
+  - RAGAS gemini-3.1-flash-lite: estimate from Settings.ragas_llm_calls_per_metric (3, 6, 7, 2) over at most 42 items: 126 + 252 + 294 + 84 = 756 requests (context precision grows with the number of contexts, up to 8 with web); cap 450 per Pacific day, so 2 days. The exact plan comes from `--plan-only` after the eval.
+  - Embeddings gemini-embedding-001: eval up to 2 requests per item (100); RAGAS response_relevancy 2 per item (up to 84); 1 day.
+  - Tavily: at most 1 credit per item, at most 50 credits.
+  - Worst case for Groq needs 2 days at most (not more than 2), so no warning applies.
+  - `py tasks.py budget --need openai/gpt-oss-20b=180000:150 --need openai/gpt-oss-120b=130000:50 --need gemini-embedding-001=400:100`: all three "fits".
+
+S3 Step 1: eval run (in progress, stopped)
+- `py tasks.py eval --pipeline corrective` started 18:52Z; run folder results/runs/corrective-20261120-1852.
+- STOP rule hit: q008 used 9,560 Groq tokens (limit 8,000 per item). The runner was stopped by ending its process after 8 complete items (per_question.jsonl 8 lines, q001 to q008; no partial line; failed_attempts.jsonl empty). The folder is resumable with `py tasks.py eval --pipeline corrective --run-dir results/runs/corrective-20261120-1852`.
+- q008 detail: direct path (graded 2 of 5 relevant on the first try, route to generate, 2 LLM calls, no retries, no web). gpt-oss-20b grade 4,857 in + 294 out = 5,151; gpt-oss-120b generate 4,172 in + 237 out = 4,409 (from 2 graded excerpts). The answer abstained (false abstention candidate). The cost is input size: q008 was also the largest baseline item (5,236 tokens for one 120b call over 5 excerpts; the next largest baseline item was 3,109).
+- q001 to q007: all graded relevant on the first try, 2 calls each, 2,917 to 4,912 Groq tokens; no grading failures, missing or invalid grades.
+- Open question for the human: continue the run with q008 accepted as recorded, or another instruction.
+- Human decision (2026-11-21): resume with q008 kept exactly as recorded. The 8,000-token STOP is replaced for the rest of S3 (see Deviations).
+- Checks before resuming (no code changed):
+  - a) Throttle (src/ragdocs/eval/throttle.py, runner.py):
+    - The estimate is per model. UsageEstimator keeps, per model, the maximum tokens and requests seen in one item. wait_all calls each model's RollingBudget.wait_for with that model's own estimate. Before the first observation every model gets eval_initial_token_estimate (3,000). On resume, seed_estimator feeds the done items into it.
+    - RollingBudget.wait_for first checks the daily cap (DailyLimitReached, exit 3). It then loops until window tokens + estimate <= tokens_per_min x safety and requests fit, or until the per-minute window has no events (`if fits or not self._events: return`). An estimate above 8,000 x 0.9 = 7,200 therefore waits for an empty window at worst, then proceeds. It does not wait forever and does not raise.
+    - After q008 the estimates are gpt-oss-20b 5,151 and gpt-oss-120b 4,409, both under 7,200. The next wait_for returns after at most one window (60 s).
+    - The per-minute window is in memory, so a resumed process starts with an empty window.
+    - The pre-approved fix applies only if wait_for could block forever or the estimate were a cross-model total. Neither is true, so it was not applied and no code changed.
+  - b) Groq 429 handling (installed sources):
+    - src/ragdocs/providers/llm.py builds ChatGroq with max_retries=3 for both the generator and the grader. langchain_groq passes max_retries to the groq client.
+    - groq/_base_client.py _should_retry retries on status 429 unless the response has the header x-should-retry: false. _calculate_retry_timeout uses retry-after-ms or retry-after when it is between 0 and 60 s. Otherwise it backs off exponentially: 0.5 s x 2^n, capped at 8 s (groq/_constants.py), with up to 25% jitter. So a call is tried at most 4 times (1 + 3 retries), and a retry-after over 60 s is not honoured; the backoff is used instead.
+    - When the retries run out, RateLimitError ends the graph with an error event. The runner (_run_one) writes the attempt to failed_attempts.jsonl and calls handle_rate_limit. That function waits for the retry-after parsed from the message (default rate_limit_default_wait_s 60 s) plus 1 s, and the item is retried. A rate-limited attempt does not use up an item attempt.
+    - The run pauses with exit 3 (RateLimitPause) if the wait is over rate_limit_max_wait_s (1,800 s), if the waits for one item exceed rate_limit_max_waits_per_item (3), or if a per-day 429 is the second budget-model miss (budget_model_max_misses 2).
+- Budget before resuming (2026-11-20 19:31Z by the machine clock): gpt-oss-20b balance 15,952/200,000, gpt-oss-120b 10,849/200,000, embeddings 12/1000. `py tasks.py budget --need openai/gpt-oss-20b=150000:130 --need openai/gpt-oss-120b=120000:42 --need gemini-embedding-001=400:84`: all three "fits".
+- Rules for the remaining items (human, 2026-11-21):
+  - Per-item tokens per model are recorded and reported, not a STOP.
+  - Every item over 7,200 tokens on one model is listed below.
+  - STOP if any single LLM call uses more than 7,200 tokens (checked per call from the cache/budget.json events).
+  - STOP if the same item fails on rate-limit retries twice in a row.
+  - Exit 3 is handled as before.
+- Note for Step 3 (human): q008 abstained in both pipelines. Corrective graded 2 of 5 excerpts relevant before abstaining, so that false abstention happened at generation, not grading.
+- Resumed run: `py tasks.py eval --pipeline corrective --run-dir results/runs/corrective-20261120-1852`, 2026-11-20 19:31Z to about 20:30Z (machine clock), exit 0. Final lines: "q050 done (4 calls, 8248 ms)", "All items done. Summary written to results/runs/corrective-20261120-1852/summary.md".
+- Failed attempts (failed_attempts.jsonl). Each was retried and succeeded on the second attempt; neither was a rate-limit failure:
+  - q043: stage grade_documents, message "WebSearchError", 2026-11-20T19:59:50Z. The stage is the last node_start before the error. The error came from the web_search node, which emits its node_start only in its return value, so the stage still reads grade_documents. Its TraceEvent message is the class name only (S2 decision). The LangSmith trace (tavily_search run, read-only) gives "Tavily search failed after 1 attempt(s): ConnectionError (status None)": a connection error with no HTTP status, which TavilySearch does not retry (it retries only 429 and 5xx).
+  - q049: stage grade_documents, message "BadRequestError". It was a Groq 400 on the rewrite_query call (structured RewrittenQuery on gpt-oss-20b), not on a grader call. The LangSmith trace shows the error on ChatGroq under rewrite_query. rewrite_query emits its node_start only in its return value, so the stage still reads grade_documents. budget.json has one gpt-oss-20b request with 0 tokens in the run. The runner retried the whole item, which then completed (4 calls, web fallback).
+- Per item (Groq tokens per model are input + output, from per_question usage):
+  | id | category | path | grading k of n | llm_calls | gpt-oss-20b | gpt-oss-120b | used_web | abstained |
+  |---|---|---|---|---|---|---|---|---|
+  | q001 | single | graded relevant first try | 4 of 5 | 2 | 1,915 | 1,761 | False | False |
+  | q002 | single | graded relevant first try | 5 of 5 | 2 | 2,219 | 2,522 | False | False |
+  | q003 | single | graded relevant first try | 1 of 5 | 2 | 2,603 | 923 | False | False |
+  | q004 | single | graded relevant first try | 4 of 5 | 2 | 2,601 | 2,311 | False | False |
+  | q005 | single | graded relevant first try | 4 of 5 | 2 | 2,333 | 2,095 | False | False |
+  | q006 | single | graded relevant first try | 2 of 5 | 2 | 2,604 | 1,076 | False | False |
+  | q007 | single | graded relevant first try | 2 of 5 | 2 | 1,847 | 1,070 | False | False |
+  | q008 | single | graded relevant first try | 2 of 5 | 2 | 5,151 | 4,409 | False | True |
+  | q009 | version | graded relevant first try | 4 of 5 | 2 | 1,942 | 2,233 | False | False |
+  | q010 | single | graded relevant first try | 3 of 5 | 2 | 2,968 | 2,081 | False | False |
+  | q011 | single | graded relevant first try | 3 of 5 | 2 | 3,153 | 2,433 | False | False |
+  | q012 | single | graded relevant first try | 2 of 5 | 2 | 2,099 | 1,434 | False | False |
+  | q013 | single | graded relevant first try | 5 of 5 | 2 | 2,338 | 2,724 | False | False |
+  | q014 | single | graded relevant first try | 2 of 5 | 2 | 1,896 | 975 | False | False |
+  | q015 | single | graded relevant first try | 3 of 5 | 2 | 2,298 | 1,508 | False | False |
+  | q016 | single | graded relevant first try | 4 of 5 | 2 | 2,146 | 2,189 | False | False |
+  | q017 | single | graded relevant first try | 2 of 5 | 2 | 2,089 | 1,575 | False | False |
+  | q018 | single | graded relevant first try | 4 of 5 | 2 | 2,257 | 2,338 | False | False |
+  | q019 | single | graded relevant first try | 2 of 5 | 2 | 2,579 | 1,564 | False | False |
+  | q020 | single | graded relevant first try | 3 of 5 | 2 | 2,337 | 1,720 | False | False |
+  | q021 | single | graded relevant first try | 4 of 5 | 2 | 1,491 | 1,290 | False | False |
+  | q022 | single | graded relevant first try | 2 of 5 | 2 | 2,319 | 1,415 | False | False |
+  | q023 | single | graded relevant first try | 4 of 5 | 2 | 2,650 | 2,025 | False | False |
+  | q024 | single | graded relevant first try | 1 of 5 | 2 | 2,743 | 1,193 | False | False |
+  | q025 | single | web fallback | 0 of 5; 0 of 5 | 4 | 4,313 | 1,839 | True | True |
+  | q026 | single | graded relevant first try | 1 of 5 | 2 | 2,241 | 1,101 | False | False |
+  | q027 | single | graded relevant first try | 4 of 5 | 2 | 1,958 | 1,787 | False | False |
+  | q028 | single | graded relevant first try | 1 of 5 | 2 | 1,933 | 799 | False | False |
+  | q029 | multi | graded relevant first try | 5 of 5 | 2 | 2,890 | 2,109 | False | True |
+  | q030 | multi | graded relevant first try | 4 of 5 | 2 | 2,890 | 2,232 | False | False |
+  | q031 | multi | graded relevant first try | 2 of 5 | 2 | 2,446 | 1,538 | False | False |
+  | q032 | multi | graded relevant first try | 4 of 5 | 2 | 1,891 | 1,887 | False | False |
+  | q033 | multi | graded relevant first try | 3 of 5 | 2 | 2,633 | 1,921 | False | False |
+  | q034 | multi | graded relevant first try | 4 of 5 | 2 | 1,881 | 2,126 | False | False |
+  | q035 | multi | graded relevant first try | 1 of 5 | 2 | 2,246 | 1,326 | False | False |
+  | q036 | multi | graded relevant first try | 5 of 5 | 2 | 2,029 | 2,764 | False | False |
+  | q037 | version | graded relevant first try | 5 of 5 | 2 | 2,277 | 2,396 | False | False |
+  | q038 | version | graded relevant first try | 3 of 5 | 2 | 2,648 | 2,009 | False | False |
+  | q039 | single | graded relevant first try | 5 of 5 | 2 | 2,660 | 2,822 | False | False |
+  | q040 | version | graded relevant first try | 5 of 5 | 2 | 2,663 | 2,420 | False | False |
+  | q041 | version | graded relevant first try | 5 of 5 | 2 | 2,046 | 2,089 | False | False |
+  | q042 | version | graded relevant first try | 4 of 5 | 2 | 2,136 | 1,789 | False | False |
+  | q043 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 5,672 | 985 | True | True |
+  | q044 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 4,042 | 1,359 | True | True |
+  | q045 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 3,921 | 1,591 | True | True |
+  | q046 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 4,643 | 1,393 | True | True |
+  | q047 | unanswerable | graded relevant first try | 1 of 5 | 2 | 2,422 | 1,002 | False | True |
+  | q048 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 5,290 | 1,264 | True | True |
+  | q049 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 4,869 | 1,511 | True | True |
+  | q050 | unanswerable | web fallback | 0 of 5; 0 of 5 | 4 | 5,654 | 1,070 | True | True |
+- Paths: graded relevant on the first try 42 (q001 to q024, q026 to q042, q047); rewrote then relevant 0; web fallback 8 (q025 and q043 to q046, q048 to q050), each after 0 of 5 on both gradings; abstained on empty web 0 (every web search returned 1 to 3 results).
+- Diagnostics over 50 items: grading_failures 0, missing_grades 0, invalid_grades 0, rewrite_unchanged 0, web_duplicates_dropped 4. Malformed grading on 0 of 50 items (STOP rule: more than 3).
+- Web hosts: 20 web results across 8 items, all docs.langchain.com (STOP rule: none outside). 11 of the 20 URLs are outside the ingested LangGraph Python corpus (oss/javascript, oss/python/langchain, oss/python/integrations, langsmith).
+- Token rules:
+  - Items over 7,200 tokens on one model: none. The largest per item were gpt-oss-20b 5,672 (q043) and gpt-oss-120b 4,409 (q008).
+  - Largest single LLM call (cache/budget.json events since the run started): gpt-oss-20b 5,151, gpt-oss-120b 4,409. The per-call STOP (over 7,200) did not apply.
+  - Rate-limit failures in a row: none.
+  - The old 8,000 combined rule would have flagged only q008 (9,560).
+- Totals in per_question.jsonl: gpt-oss-20b 138,872 tokens over 66 calls; gpt-oss-120b 89,993 tokens over 50 calls.
+  - budget.json recorded 71 gpt-oss-20b requests and 50 gpt-oss-120b requests, including the failed attempts: q043's first attempt, and q049's 400, which counts as 1 request with 0 tokens.
+  - 8 web items used 8 Tavily credits.
+- Step 1.3: per_question.jsonl has 50 lines with 50 unique ids. summary.json and summary.md exist.
+- Judge (D9: eval does not judge): `py tasks.py budget --need gemini-3.5-flash-lite=110000:42` "fits"; `py tasks.py judge --run-dir results/runs/corrective-20261120-1852`, exit 0, "Judging complete". judge_v2.jsonl: 39/39 eligible items judged, 0 cached, 66,166 tokens in and 2,540 out, gemini-3.5-flash-lite, prompt version 2.
+
+S3 Step 2: RAGAS and experiment
+- Plan (`py tasks.py ragas --run-dir results/runs/corrective-20261120-1852 --plan-only`): "faithfulness 39 x 3 = 117; response_relevancy 39 x 6 = 234; context_precision 42 x 7 = 294; context_recall 42 x 2 = 84; total 729 requests; used today 0/500; cap at 0.9 = 450; days needed 2"; embeddings 78 requests. `--cache-check`: 1/42 items fully cached, still needed 720 LLM and 78 embedding requests.
+- `py tasks.py budget --need gemini-3.1-flash-lite=1125000:450 --need gemini-embedding-001=6000:78`: both "fits" (the tool caps itself at 450 per Pacific day and exits 3 at the cap).
+- `py tasks.py ragas --run-dir results/runs/corrective-20261120-1852` (2026-11-20 20:13Z to about 20:45Z), exit 0 in one session: "Wrote ragas_config.json, ragas_scores.jsonl, ragas_summary.json to results/runs/corrective-20261120-1852". Actual use: 367 LLM requests (461,056 tokens) and 35 embedding requests, below the 729 estimate (fewer contexts per item than the estimate assumes). cache/ragas_errors.jsonl: no entries from this run (no retried failures).
+
+  | metric | mean | n_eligible | n_scored | n_errored |
+  |---|---|---|---|---|
+  | faithfulness (prose-level grounding signal) | 0.909 | 39 | 39 | 0 |
+  | response_relevancy | 0.823 | 39 | 39 | 0 |
+  | context_precision (on contexts given to the generator) | 0.781 | 42 | 42 | 0 |
+  | context_recall (on contexts given to the generator) | 0.821 | 42 | 42 | 0 |
+
+- 10% error rule: 0/39, 0/39, 0/42, 0/42. PASS.
+- `py tasks.py experiment --run-dir results/runs/corrective-20261120-1852` (no --replace): "Dataset ragdocs-eval-set-v1 verified (same 50 ids and sha256)"; experiment corrective-20261120-1852, id 1b13b3ef-e94f-423b-bcee-eb930ae61de1, 50 examples, current.
+  - URL: https://smith.langchain.com/o/dc790a75-743f-467d-a940-18bb085de125/datasets/6f229f5d-8cff-45b9-840f-3ec576feb329/compare?selectedSessions=1b13b3ef-e94f-423b-bcee-eb930ae61de1
+- API check (Client.read_project include_stats, read-only): both corrective-20261120-1852 and baseline-20261116-1050-r2 have the same 15 feedback keys: abstention_correct, citation_support, context_evidence_recall_at_5, context_hit_at_5, context_precision, context_recall, correctness, faithfulness, first_retrieval_hit_at_5, hallucinated, latency_ms, llm_calls, must_mention_coverage, response_relevancy, tokens. Corrective n and mean: correctness 42 1.786; first_retrieval_hit_at_5 42 0.810; context_hit_at_5 42 0.786; faithfulness 39 0.909; response_relevancy 39 0.823; context_precision 42 0.781; context_recall 42 0.821; tokens 50 4,577.3; llm_calls 50 2.32.
+
+S3 Step 3: compare and record
+- `py tasks.py compare results/runs/baseline-20261116-1050 results/runs/corrective-20261120-1852`: exit 0, "Wrote .../results/summary.md" (compare accepted the pair: same tracing setting, judge prompt version 2 in both). results/summary.md as written:
+
+  # Run comparison
+  
+  Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correctness n = every answerable item.
+  
+  ## Overall
+  
+  | Field | baseline-20261116-1050 | corrective-20261120-1852 |
+  |---|---|---|
+  | items | 50 | 50 |
+  | answerable n | 42 | 42 |
+  | correct (correctness = 2) | 0.905 (38/42) | 0.881 (37/42) |
+  | correct or partial (correctness >= 1) | 0.929 (39/42) | 0.905 (38/42) |
+  | mean correctness (0-2) | 1.833 (n=42) | 1.786 (n=42) |
+  | citation_support (judged items) | 1.000 (39/39) | 0.949 (37/39) |
+  | first-retrieval hit@5 (like-for-like retrieval) | 0.810 (34/42) | 0.810 (34/42) |
+  | context_hit@5 (on contexts given to the generator) | 0.810 (34/42) | 0.786 (33/42) |
+  | mean context_evidence_recall@5 (on contexts given to the generator) | 0.726 (n=42) | 0.702 (n=42) |
+  | mean must_mention coverage (soft signal, D15) | 0.905 (n=42) | 0.905 (n=42) |
+  | false_abstention | 0.071 (3/42) | 0.071 (3/42) |
+  | abstention_correct (unanswerable) | 1.000 (8/8) | 1.000 (8/8) |
+  | hallucinated (unanswerable) | 0.000 (0/8) | 0.000 (0/8) |
+  | mean llm_calls | 1.000 (n=50) | 2.320 (n=50) |
+  | p50 latency_ms | 2208 ms | 3167 ms |
+  | p95 latency_ms | 3734 ms | 8002 ms |
+  | mean tokens per question | 2333.560 (n=50) | 4577.300 (n=50) |
+  | used_web | 0.000 (0/50) | 0.160 (8/50) |
+  | structured_output_failures (failed attempts before success) | 0 (n=50) | 2 (n=50) |
+  | items with >= 1 structured_output failure | 0.000 (0/50) | 0.040 (2/50) |
+  | rate-limited attempts (not counted above) | 10 (n=50) | 0 (n=50) |
+  | RAGAS faithfulness (prose-level grounding signal) | 0.922 (39) | 0.909 (39) |
+  | RAGAS response_relevancy | 0.813 (39) | 0.823 (39) |
+  | RAGAS context_precision (on contexts given to the generator) | 0.720 (42) | 0.781 (42) |
+  | RAGAS context_recall (on contexts given to the generator) | 0.845 (42) | 0.821 (42) |
+  
+  ## single
+  
+  | Field | baseline-20261116-1050 | corrective-20261120-1852 |
+  |---|---|---|
+  | items | 28 | 28 |
+  | answerable n | 28 | 28 |
+  | correct (correctness = 2) | 0.893 (25/28) | 0.893 (25/28) |
+  | correct or partial (correctness >= 1) | 0.929 (26/28) | 0.893 (25/28) |
+  | mean correctness (0-2) | 1.821 (n=28) | 1.786 (n=28) |
+  | citation_support (judged items) | 1.000 (26/26) | 0.962 (25/26) |
+  | first-retrieval hit@5 (like-for-like retrieval) | 0.786 (22/28) | 0.786 (22/28) |
+  | context_hit@5 (on contexts given to the generator) | 0.786 (22/28) | 0.750 (21/28) |
+  | mean context_evidence_recall@5 (on contexts given to the generator) | 0.786 (n=28) | 0.750 (n=28) |
+  | mean must_mention coverage (soft signal, D15) | 0.893 (n=28) | 0.893 (n=28) |
+  | false_abstention | 0.071 (2/28) | 0.071 (2/28) |
+  | abstention_correct (unanswerable) | - | - |
+  | hallucinated (unanswerable) | - | - |
+  | mean llm_calls | 1.000 (n=28) | 2.071 (n=28) |
+  | p50 latency_ms | 2062 ms | 2942 ms |
+  | p95 latency_ms | 3447 ms | 6515 ms |
+  | mean tokens per question | 2399.107 (n=28) | 4311.429 (n=28) |
+  | used_web | 0.000 (0/28) | 0.036 (1/28) |
+  | structured_output_failures (failed attempts before success) | 0 (n=28) | 0 (n=28) |
+  | items with >= 1 structured_output failure | 0.000 (0/28) | 0.000 (0/28) |
+  | rate-limited attempts (not counted above) | 10 (n=28) | 0 (n=28) |
+  | RAGAS faithfulness (prose-level grounding signal) | 0.908 (26) | 0.922 (26) |
+  | RAGAS response_relevancy | 0.818 (26) | 0.827 (26) |
+  | RAGAS context_precision (on contexts given to the generator) | 0.772 (28) | 0.848 (28) |
+  | RAGAS context_recall (on contexts given to the generator) | 0.857 (28) | 0.857 (28) |
+  
+  ## multi
+  
+  | Field | baseline-20261116-1050 | corrective-20261120-1852 |
+  |---|---|---|
+  | items | 8 | 8 |
+  | answerable n | 8 | 8 |
+  | correct (correctness = 2) | 0.875 (7/8) | 0.750 (6/8) |
+  | correct or partial (correctness >= 1) | 0.875 (7/8) | 0.875 (7/8) |
+  | mean correctness (0-2) | 1.750 (n=8) | 1.625 (n=8) |
+  | citation_support (judged items) | 1.000 (7/7) | 0.857 (6/7) |
+  | first-retrieval hit@5 (like-for-like retrieval) | 0.875 (7/8) | 0.875 (7/8) |
+  | context_hit@5 (on contexts given to the generator) | 0.875 (7/8) | 0.875 (7/8) |
+  | mean context_evidence_recall@5 (on contexts given to the generator) | 0.500 (n=8) | 0.500 (n=8) |
+  | mean must_mention coverage (soft signal, D15) | 0.875 (n=8) | 0.875 (n=8) |
+  | false_abstention | 0.125 (1/8) | 0.125 (1/8) |
+  | abstention_correct (unanswerable) | - | - |
+  | hallucinated (unanswerable) | - | - |
+  | mean llm_calls | 1.000 (n=8) | 2.000 (n=8) |
+  | p50 latency_ms | 2772 ms | 3692 ms |
+  | p95 latency_ms | 3610 ms | 4243 ms |
+  | mean tokens per question | 2368.500 (n=8) | 4351.125 (n=8) |
+  | used_web | 0.000 (0/8) | 0.000 (0/8) |
+  | structured_output_failures (failed attempts before success) | 0 (n=8) | 0 (n=8) |
+  | items with >= 1 structured_output failure | 0.000 (0/8) | 0.000 (0/8) |
+  | rate-limited attempts (not counted above) | 0 (n=8) | 0 (n=8) |
+  | RAGAS faithfulness (prose-level grounding signal) | 0.907 (7) | 0.827 (7) |
+  | RAGAS response_relevancy | 0.817 (7) | 0.843 (7) |
+  | RAGAS context_precision (on contexts given to the generator) | 0.479 (8) | 0.500 (8) |
+  | RAGAS context_recall (on contexts given to the generator) | 0.688 (8) | 0.562 (8) |
+  
+  ## version
+  
+  | Field | baseline-20261116-1050 | corrective-20261120-1852 |
+  |---|---|---|
+  | items | 6 | 6 |
+  | answerable n | 6 | 6 |
+  | correct (correctness = 2) | 1.000 (6/6) | 1.000 (6/6) |
+  | correct or partial (correctness >= 1) | 1.000 (6/6) | 1.000 (6/6) |
+  | mean correctness (0-2) | 2.000 (n=6) | 2.000 (n=6) |
+  | citation_support (judged items) | 1.000 (6/6) | 1.000 (6/6) |
+  | first-retrieval hit@5 (like-for-like retrieval) | 0.833 (5/6) | 0.833 (5/6) |
+  | context_hit@5 (on contexts given to the generator) | 0.833 (5/6) | 0.833 (5/6) |
+  | mean context_evidence_recall@5 (on contexts given to the generator) | 0.750 (n=6) | 0.750 (n=6) |
+  | mean must_mention coverage (soft signal, D15) | 1.000 (n=6) | 1.000 (n=6) |
+  | false_abstention | 0.000 (0/6) | 0.000 (0/6) |
+  | abstention_correct (unanswerable) | - | - |
+  | hallucinated (unanswerable) | - | - |
+  | mean llm_calls | 1.000 (n=6) | 2.000 (n=6) |
+  | p50 latency_ms | 2430 ms | 3047 ms |
+  | p95 latency_ms | 3420 ms | 3816 ms |
+  | mean tokens per question | 2352.833 (n=6) | 4441.333 (n=6) |
+  | used_web | 0.000 (0/6) | 0.000 (0/6) |
+  | structured_output_failures (failed attempts before success) | 0 (n=6) | 0 (n=6) |
+  | items with >= 1 structured_output failure | 0.000 (0/6) | 0.000 (0/6) |
+  | rate-limited attempts (not counted above) | 0 (n=6) | 0 (n=6) |
+  | RAGAS faithfulness (prose-level grounding signal) | 1.000 (6) | 0.948 (6) |
+  | RAGAS response_relevancy | 0.784 (6) | 0.778 (6) |
+  | RAGAS context_precision (on contexts given to the generator) | 0.798 (6) | 0.847 (6) |
+  | RAGAS context_recall (on contexts given to the generator) | 1.000 (6) | 1.000 (6) |
+  
+  ## unanswerable
+  
+  | Field | baseline-20261116-1050 | corrective-20261120-1852 |
+  |---|---|---|
+  | items | 8 | 8 |
+  | answerable n | 0 | 0 |
+  | correct (correctness = 2) | - | - |
+  | correct or partial (correctness >= 1) | - | - |
+  | mean correctness (0-2) | - | - |
+  | citation_support (judged items) | - | - |
+  | first-retrieval hit@5 (like-for-like retrieval) | - | - |
+  | context_hit@5 (on contexts given to the generator) | - | - |
+  | mean context_evidence_recall@5 (on contexts given to the generator) | - | - |
+  | mean must_mention coverage (soft signal, D15) | - | - |
+  | false_abstention | - | - |
+  | abstention_correct (unanswerable) | 1.000 (8/8) | 1.000 (8/8) |
+  | hallucinated (unanswerable) | 0.000 (0/8) | 0.000 (0/8) |
+  | mean llm_calls | 1.000 (n=8) | 3.750 (n=8) |
+  | p50 latency_ms | 1822 ms | 6638 ms |
+  | p95 latency_ms | 4181 ms | 8706 ms |
+  | mean tokens per question | 2054.750 (n=8) | 5836.000 (n=8) |
+  | used_web | 0.000 (0/8) | 0.875 (7/8) |
+  | structured_output_failures (failed attempts before success) | 0 (n=8) | 2 (n=8) |
+  | items with >= 1 structured_output failure | 0.000 (0/8) | 0.250 (2/8) |
+  | rate-limited attempts (not counted above) | 0 (n=8) | 0 (n=8) |
+  | RAGAS faithfulness (prose-level grounding signal) | - | - |
+  | RAGAS response_relevancy | - | - |
+  | RAGAS context_precision (on contexts given to the generator) | - | - |
+  | RAGAS context_recall (on contexts given to the generator) | - | - |
+  
+  ## Changed questions (against baseline-20261116-1050)
+  
+  ### corrective-20261120-1852
+  
+  - q024: correctness 1 -> 0 (worse)
+  - q034: correctness 2 -> 1 (worse)
+  
+  
+  ## Paired
+  
+  Means over items scored in every compared run (n). A paired item is better or worse when the difference exceeds 0.2; the verdict is "no measurable difference" unless wins minus losses is 3 or more (D19).
+  
+  ### corrective-20261120-1852 against baseline-20261116-1050
+  
+  **Correctness verdict (primary): no measurable difference.** 0 items better, 2 worse, 40 unchanged, out of 42 answerable items (a direction needs a net of 3 items). The correctness row in the table is supporting detail; must_mention coverage is a soft signal (D15).
+  
+  | Metric | n | first mean | this mean | better | worse | verdict |
+  |---|---|---|---|---|---|---|
+  | correctness (0-2; abstained = 0) | 42 | 1.833 | 1.786 | 0 | 2 | no measurable difference |
+  | context_evidence_recall@5 (on contexts given to the generator) | 42 | 0.726 | 0.702 | 0 | 1 | no measurable difference |
+  | must_mention coverage (soft signal, D15) | 42 | 0.905 | 0.905 | 0 | 0 | no measurable difference |
+  | RAGAS faithfulness (prose-level grounding signal) | 39 | 0.922 | 0.909 | 2 | 3 | no measurable difference |
+  | RAGAS response_relevancy | 39 | 0.813 | 0.823 | 1 | 0 | no measurable difference |
+  | RAGAS context_precision (on contexts given to the generator) | 42 | 0.720 | 0.781 | 3 | 1 | no measurable difference |
+  | RAGAS context_recall (on contexts given to the generator) | 42 | 0.845 | 0.821 | 0 | 1 | no measurable difference |
+
+- Changed questions (one line each; deciding branch and k-of-n grading from the corrective trace):
+  - q024 | single | correctness 1 -> 0, citation_support 1 -> 0; not abstained in either | graded relevant | 1 of 5 (kept excerpt 1, "unordered updates in parallel supersteps"). Judge v2 rationale: the answer attributes the failure to inconsistent ordering instead of missing reducers. Gold evidence was not in the first retrieval (first-retrieval hit@5 0 in both runs).
+  - q034 | multi | correctness 2 -> 1, citation_support 1 -> 0; not abstained in either | graded relevant | 4 of 5. Judge v2 rationale: the answer invents an "@update_state" decorator instead of graph.update_state(config, values). First-retrieval hit@5 1 in both runs.
+  - No question changed on abstention.
+- Observations (counts; noise rules D19):
+  - False abstentions: baseline 3/42 (q008, q025, q029), corrective 3/42 (the same three items).
+    - q008: first grading 2 of 5 relevant, route to generate, abstained at generation (not grading; human note). Gold evidence not in the first retrieval (first-retrieval hit@5 0 in both runs).
+    - q025: 0 of 5 on both gradings, then web search (3 results: python/langgraph/interrupts, javascript/langgraph/graph-api-control-flow, python/langchain/structured-output); abstained. Gold evidence not in the first retrieval, so retrieval missed gold evidence (not grader strictness).
+    - q029: 5 of 5 relevant, gold evidence at first-retrieval rank 1; abstained at generation.
+    - Corrective false abstentions with 0 of n relevant on a first retrieval that held gold evidence (grader too strict): 0. Retrieval missed gold evidence: 1 (q025).
+  - Unanswerable items: abstention_correct baseline 8/8, corrective 8/8; hallucinated 0/8 in both. Corrective unanswerables that reached web search: 7 of 8 (q043, q044, q045, q046, q048, q049, q050); q047 graded 1 of 5 relevant on the first try and abstained at generation.
+  - Retrieval: first-retrieval hit@5 baseline 34/42, corrective 34/42 (like-for-like). Corrective context_hit@5 (on contexts given to the generator) 33/42. The one-item drop is q014: the grader marked the gold chunk (excerpt 2) not relevant ("Mentions entrypoint, not discrete step decorator") and kept excerpts 3 and 4; correctness did not change. Limitation: web chunks mostly get anchor "" or a "web:" doc_path, so they almost never match section-level gold evidence; context_hit@5 and context_evidence_recall@5 undercount web-supported answers. In this run no web-using item gave an answer (all 8 abstained), so the undercount affects no answered item here.
+  - Web chunks and the pinned docs commit (D8): no answer cites a web chunk (all 8 web-using items abstained with no citations). 11 of the 20 web URLs were outside the ingested LangGraph Python corpus. Nothing to note further.
+  - Identifiers named by the grader or rewriter that appear in neither the question nor any excerpt (retrieved chunk text, titles, headings, web contexts; case-insensitive search over identifier-like words). All are in rewritten queries of unanswerable items:
+    - q043 "max_retry_time" (as in S2).
+    - q044 "Neo4jCheckpointer" (compound of the question's "Neo4j" and "checkpointer").
+    - q045 "WebSocketServer" (compound of the question's "WebSocket server").
+    - q046 "max_checkpoints_per_thread".
+    - q048 "export_graphql".
+    - q049 "node_executor".
+    - q050 "token_usage".
+    - The search also flagged q008's grader reason "StateSnapshots". That is the plural of StateSnapshot, which appears 6 times in q008's excerpt 4, so it is not counted.
+    - No grader reason on any answerable item named a new identifier.
+  - The summary row "structured_output_failures 2 (items 2/50)" counts every failed attempt in failed_attempts.jsonl. Neither was a structured-output failure: q043's was a WebSearchError (Tavily ConnectionError) and q049's a Groq 400 json_validate_failed on the rewrite_query call. Both items succeeded on retry. The grading diagnostics (grading_failures, missing and invalid grades) were 0 on every item.
+- Screenshot (Step 3.4): docs/screenshots/langsmith-baseline-vs-corrective.png, 197,022 bytes, saved by the human (comparison view of baseline-20261116-1050-r2 and corrective-20261120-1852). Confirmed present.
+
+S3 additional facts (human request, 2026-11-21; read from the run folders and the LangSmith traces, no code, prompt or settings change)
+- 1) Grader acceptance on the first retrieval:
+  - 41 of 42 answerable items had at least 1 chunk marked relevant on the first retrieval. The exception is q025.
+  - On 7 of those 41 the first retrieval missed all gold evidence (first_retrieval_hit@5 = 0): q008, q012, q018, q024, q031, q038, q039.
+  - With min_relevant_chunks = 1, these items went straight to generate and never reached rewrite or web search.
+  - Their corrective outcomes: q008 false abstention; q024 correctness 0; the other 5 judged as in the summary.
+- 2) Rewrites:
+  - 8 items were rewritten: q025, q043, q044, q045, q046, q048, q049, q050.
+  - The second retrieval produced a relevant chunk on 0 of 8.
+  - All 8 then went to web search.
+- 3) q049:
+  - The call was rewrite_query's structured RewrittenQuery call on gpt-oss-20b (json_schema, strict). It was not a grader call; the corrected Step 1 line says so.
+  - Groq returned a 400 with error type "invalid_request_error" and code "json_validate_failed". Message: "Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."; failed_generation was empty.
+  - The groq client did not retry it. A 400 is not retryable in groq/_base_client.py _should_retry.
+  - The error ended the graph with an error event. The runner recorded a failed attempt and retried the whole item (eval_item_attempts 2), which completed on the second attempt.
+- 4) q025, the only answerable item that fell back to web search:
+  - Question: "What exception is raised when a node function outputs a list rather than a mapping?" Gold evidence: errors/INVALID_GRAPH_NODE_RETURN_VALUE.mdx, anchor "".
+  - Baseline: false abstention, context_hit@5 0.
+  - Corrective: first grading 0 of 5, then the query was rewritten to "NodeError exception raised for node output list instead of mapping". The second grading was also 0 of 5.
+  - Web search returned 3 results, none of them the gold page:
+    - https://docs.langchain.com/oss/python/langgraph/interrupts (maps to interrupts.mdx, anchor "")
+    - https://docs.langchain.com/oss/javascript/langgraph/graph-api-control-flow (outside the corpus, web: doc_path)
+    - https://docs.langchain.com/oss/python/langchain/structured-output (outside the corpus; its snippet is raw page JSX such as "_jsx(_components.code,...")
+  - The generator abstained: false abstention, correctness 0, context_hit@5 0. Same outcome in both pipelines.
+- 5) Grading drop behind context_hit@5 0.810 -> 0.786: 1 item, q014.
+  - Gold evidence was in the first retrieval (excerpt 2). The grader marked it not relevant ("Mentions entrypoint, not discrete step decorator"), so it was not in the contexts given to the generator.
+  - Correctness did not change against the baseline.
+
+S3 final verification (2026-11-21, before commit)
+- `py tasks.py lint`: "All checks passed!", "142 files already formatted".
+- `py tasks.py test`: "243 passed, 1 deselected in 12.34s".
+- `py tasks.py bundle-check`: "Total bundle size: 229.91 MB (limit: 400.00 MB)", exit 0.
+- git status before staging: M docs/progress/M10-corrective-rag.md, M docs/progress/PROGRESS.md, M results/summary.md; untracked docs/audit/ (stays untracked), docs/screenshots/langsmith-baseline-vs-corrective.png, results/runs/corrective-20261120-1852/. data/processed/source.json unmodified.
+
+S3 budget plan against measured use
+
+| item | plan | measured |
+|---|---|---|
+| gpt-oss-20b | 105,000 (best) to 236,700 (worst) tokens, 50 to 150 requests | 145,923 tokens, 71 requests in cache/budget.json, including q043's failed first attempt (7,051 tokens) and q049's 0-token 400; 138,872 tokens over 66 calls in per_question.jsonl |
+| gpt-oss-120b | about 116,700 to 130,000 tokens, at most 50 calls | 89,993 tokens, 50 calls |
+| judge gemini-3.5-flash-lite | at most 42 calls, about 95,000 tokens | 39 calls, 68,706 tokens |
+| RAGAS gemini-3.1-flash-lite | 729 to 756 requests, 2 days | 367 requests, 461,056 tokens, 1 day |
+| embeddings gemini-embedding-001 | up to 100 (eval) plus 78 to 84 (RAGAS) | 61 (eval) plus 35 (RAGAS) |
+| Tavily | at most 50 credits | 8 searches that returned results, plus q043's failed first attempt (a connection error, probably not billed) |
+| days | at most 2 | 1 (2026-11-20 18:52Z to 20:47Z by the machine clock, plus the stop for the human decision) |
+
+S3 deviations from the prompt
+- The 8,000-token STOP was replaced after q008.
+  - Human's reason: "it summed both models, but Groq's limit is 8,000 tokens per minute per model, and q008 stayed under it on each model (5,151 on gpt-oss-20b, 4,409 on gpt-oss-120b)".
+  - New rules for the remaining items: record and report per-item tokens per model; STOP on any single call over 7,200 tokens, or on two rate-limit failures in a row for one item.
+  - The first eval process was ended by hand after q008, and the same run folder was resumed. Only one corrective run folder exists.
+- The baseline's current experiment is r2 (marked current), not r3 or later as the prompt expected; no r3 exists.
+- The eval does not judge (D9), so `py tasks.py judge` was run on the corrective folder between Step 1 and Step 2.
+- The ragas export wrote ragas_input.jsonl into the run folder. It is a harness file, as for the baseline, and is committed with the folder.
+- The pre-approved throttle fix was not applied, because check (a) showed it was not needed.
+
+S3 known issues and limitations
+- The failed_attempts "stage" field is the last node_start before the error. rewrite_query and web_search emit node_start only in their return value, so a failure inside them is recorded as stage grade_documents (q043, q049).
+- summary.md's structured_output_failures row counts every failed attempt, including ones that are not structured-output failures (q043, a WebSearchError).
+- The TraceEvent error message is the class name only, so causes have to be read from LangSmith.
+- TavilySearch does not retry a connection error with no HTTP status (q043).
+- On 7 of the 8 rewrites (all unanswerables), the rewriter introduced identifiers that are in neither the question nor any excerpt. None of the 8 rewrites produced a relevant chunk.
+
+Proposed follow-ups (S3; S2's list above still stands)
+- Grader leniency on first retrieval. In 7 of 41 first-retrieval acceptances, no gold evidence was retrieved, yet min_relevant_chunks = 1 sent the item to generate. This is a candidate pre-registered ablation, not a change: fix the metric and the noise rule before running it.
+- Rewriter identifier invention: 7 of 8 rewrites named identifiers in neither the question nor the excerpts (see the Step 3 observations). Prompt ideas belong to a later module and should be measured on the eval set.
+- A 400 json_validate_failed on a structured grader or rewriter call (q049) ends the graph with an error event. In M12 that error event would reach API users unless the API handles it, for example with one retry of the call or a fallback route.
+- Retry Tavily connection errors (status None) the same way as 5xx (q043).
+- Record the failing node correctly in failed_attempts, either by emitting node_start before the call or by taking the node from the exception.
+- Report structured_output_failures in summary.md separately from other failed attempts.
+- Web snippets can be raw page markup (the q025 structured-output page). Consider cleaning web content before generation.
+
+Handoff to M11
+- Corrective cost, measured on 50 items:
+  - Per item: mean 2.32 LLM calls and 4,577 tokens (baseline: 1.00 and 2,334).
+  - Direct path: 2 calls and 2,700 to 5,600 Groq tokens. 4-call web path: 5,400 to 6,700 tokens.
+  - Per run: gpt-oss-20b about 139,000 to 146,000 tokens, gpt-oss-120b about 90,000.
+  - Largest single call: 5,151 tokens (gpt-oss-20b), 4,409 (gpt-oss-120b).
+  - Latency: p50 3,167 ms, p95 8,002 ms.
+- Grader behaviour:
+  - It accepts at least 1 chunk on the first retrieval for 41 of 42 answerable items, including 7 whose first retrieval holds no gold evidence.
+  - It rejected the gold chunk on 1 item (q014).
+  - It graded 0 of 5 on both retrievals for 7 of 8 unanswerables and for q025.
+  - Rewrites never rescued an item (0 of 8).
+  - Malformed grading: 0 of 50 items.
+- Throttle:
+  - Estimates are per model, and wait_for proceeds once the per-minute window is empty.
+  - A single call above 7,200 tokens would exceed 8,000 x 0.9 and would still be sent after an empty window.
+  - Self-RAG's extra calls (generation grading) add to gpt-oss-20b usage.
+- Groq 400s: a structured call on gpt-oss-20b can fail with 400 json_validate_failed (q049, on rewrite_query). The client does not retry it. The eval runner retries the item, but in M12 users would see an error event.
+- Quota state after S3 (2026-11-20 about 20:47Z by the machine clock):
+  - The gpt-oss-20b and gpt-oss-120b buckets drain at 2.315 tokens/s from about 146,000 and 90,000.
+  - Gemini, Pacific day 2026-11-20: judge 39/500, RAGAS LLM 367/500, embeddings 100/1000.
+  - A full self-RAG run should start after the Groq buckets have drained.
+- Compare: baseline-20261116-1050 against corrective-20261120-1852 shows no measurable difference on any paired metric. M11 compares against both with `py tasks.py compare results/runs/baseline-20261116-1050 results/runs/corrective-20261120-1852 <self-rag run>`.
+- `py tasks.py ingest` was not run in S3, and data/processed/source.json is unmodified.
