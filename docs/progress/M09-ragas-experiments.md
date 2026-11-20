@@ -191,7 +191,7 @@ Step 5: LangSmith dataset and experiment
 
 Step 6: compare
 - `py tasks.py compare results/runs/baseline-20261116-1050`: "Wrote .../results/summary.md". It shows the four RAGAS rows as "mean (n)": faithfulness (prose-level grounding signal) 0.922 (39), response_relevancy 0.813 (39), context_precision (on contexts given to the generator) 0.720 (42), context_recall (on contexts given to the generator) 0.845 (42). Per-category rows are included. The Paired section says "only one run given".
-- Screenshot: the browser extension was not connected ("Browser extension is not connected"), so docs/screenshots/langsmith-baseline-experiment.png is to be saved by the human, as in M07.
+- Screenshot: not taken at first because the browser extension was not connected. It was saved on 2026-11-20 as docs/screenshots/langsmith-baseline-experiment.png: the comparison view of baseline-20261116-1050-r1, with page zoom set to 0.7 so that all feedback columns fit, rows 1-14 visible, and latency_ms and tokens each showing "50 received".
 
 Final verification (2026-11-19)
 - `py tasks.py lint`: "All checks passed!", "126 files already formatted" (exit 0).
@@ -220,7 +220,6 @@ Open questions for the human
 - Resolved (human, option 2 after the faithfulness audit): the Step 4 sanity check failed (yes 0.896, no 0.963). Contexts were passed correctly, so RAGAS faithfulness is kept as a prose-level grounding signal (D19).
 
 Proposed follow-ups (out of scope)
-- Screenshot docs/screenshots/langsmith-baseline-experiment.png of experiment baseline-20261116-1050-r1 (URL under Step 5) was not taken: the browser extension was not connected. The human chose to commit and tag without it (2026-11-20); save it and commit it separately.
 - Move to ragas.metrics.collections when a resolved instructor provides from_genai (or with a LiteLLM client), before ragas 1.0 removes the legacy imports.
 
 Prerequisites for the next module
