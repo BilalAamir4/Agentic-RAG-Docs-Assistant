@@ -7,7 +7,7 @@ _PIPELINES: dict[str, Pipeline] = {}
 
 def list_pipelines() -> list[str]:
     """Return sorted list of supported pipeline names."""
-    return ["baseline"]
+    return ["baseline", "corrective"]
 
 
 def get_pipeline(name: str) -> Pipeline:
@@ -49,6 +49,10 @@ def get_pipeline(name: str) -> Pipeline:
                 structured_llm=structured_llm,
                 name="baseline",
             )
+        elif name == "corrective":
+            from ragdocs.pipelines.agentic.pipeline import AgenticPipeline
+
+            _PIPELINES[name] = AgenticPipeline("corrective")
 
     return _PIPELINES[name]
 

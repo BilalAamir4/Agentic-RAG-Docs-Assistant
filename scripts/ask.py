@@ -25,6 +25,8 @@ def format_event_line(event: TraceEvent) -> str:
         dropped = event.data.get("dropped_citations", 0)
         uncited = event.data.get("uncited", False)
         details = f" (dropped_citations={dropped}, uncited={uncited})"
+    elif event.type == "decision" and "outcome" in event.data:
+        details = f" (outcome={event.data['outcome']})"
 
     return f"[{event.t_ms:>5}ms] [{event.type:<10}] {event.node}: {event.message}{details}"
 
@@ -92,6 +94,8 @@ def _ask(pipeline_name: str, question: str) -> int:
         print("  (None)")
 
     print(f"\nLLM calls: {final_result.llm_calls}")
+    print(f"Abstained: {final_result.answer.abstained}")
+    print(f"Used web: {final_result.used_web}")
     print(f"Latency: {final_result.latency_ms} ms")
     return 0
 

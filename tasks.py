@@ -25,6 +25,7 @@ Commands:
   audit-eval          Audit evaluation set against evidence chunks
   dev                 Run local development server (added in M10)
   bundle-check        Check deployment bundle size (added in M01)
+  graphs              Export agentic graphs to docs/graphs/*.mmd (added in M10)
   smoke               Run smoke tests against deployed service (added in M12)
 """
 
@@ -365,6 +366,12 @@ def cmd_dev(args: argparse.Namespace, extra_args: list[str]) -> int:
     return run_command(cmd)
 
 
+def cmd_graphs(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Export the agentic graphs as Mermaid files (offline)."""
+    py = ensure_venv_exists()
+    return run_command([str(py), str(REPO_ROOT / "scripts" / "export_graphs.py"), *extra_args])
+
+
 def cmd_bundle_check(args: argparse.Namespace, extra_args: list[str]) -> int:
     py = ensure_venv_exists()
     script = REPO_ROOT / "tools" / "bundle_size.py"
@@ -452,6 +459,7 @@ def main() -> int:
 
     subparsers.add_parser("dev", help="Run dev server")
     subparsers.add_parser("bundle-check", help="Check bundle size")
+    subparsers.add_parser("graphs", help="Export agentic graphs as Mermaid")
 
     smoke_parser = subparsers.add_parser("smoke", help="Run smoke tests")
     smoke_parser.add_argument("--url", required=False, help="Target URL")
@@ -487,6 +495,7 @@ def main() -> int:
         "audit-eval": cmd_audit_eval,
         "dev": cmd_dev,
         "bundle-check": cmd_bundle_check,
+        "graphs": cmd_graphs,
         "smoke": cmd_smoke,
     }
 

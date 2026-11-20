@@ -227,3 +227,16 @@
 - **Test:** tests/test_ragas_export.py writes the same events with both writers and asserts byte-identical files, cross-reads them, and checks that both compute the same daily usage, cap and reset time.
 - **Reason:** The API budget rule (AGENTS.md, D7) needs every live call from either environment in one file.
 - **Date:** 2026-11-18
+
+### D25 Decision Event Outcome Contract
+- **Decision:** How the UI and tests classify decision TraceEvents.
+- **Choice:** Every TraceEvent of type "decision" sets data["outcome"] to exactly one of "ok", "retry", "stop" or "info" (ragdocs.pipelines.agentic.state.OUTCOMES). The UI colours decisions from this field only, never from message text.
+- **Corrective mapping (M10):**
+  - grade_documents "k of n chunks relevant": "ok" when the accumulated relevant chunks reach Settings.min_relevant_chunks, else "retry" (also on a grading parse failure, which the message names).
+  - grade_documents routing event ("Route to <branch>: <reason>", data.branch): "ok" for generate, "retry" for rewrite_query and web_search.
+  - rewrite_query "query rewritten" (data.old_query, data.new_query): "retry".
+  - web_search "fell back to web search" (data.urls): "retry" when it returned results, "stop" when it returned none.
+  - generate: "info" when generating ("Generating from k graded excerpts and m web results"); "stop" when there are no contexts and the pipeline abstains without an LLM call.
+- **Trace naming addition:** the Tavily call inside the web_search node runs as "tavily_search" (run_type tool), so it does not nest under the node run of the same name (D22; human choice, M10 S2).
+- **Reason:** One machine-readable field lets M13 colour every decision consistently across corrective and self-RAG, and lets tests assert routing without parsing messages.
+- **Date:** 2026-11-20

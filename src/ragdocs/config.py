@@ -184,6 +184,9 @@ class Settings(BaseSettings):
     # (doubled after each failed attempt: 1 s, 2 s).
     web_search_max_attempts: int = 3
     web_search_backoff_s: float = 1.0
+    # Web result content kept per chunk, in characters (M10 S2; Tavily snippets measured
+    # 988 to 1,128 characters in S1).
+    web_text_max_chars: int = 1800
 
     # Repository paths
     data_dir: Path = Field(default_factory=lambda: REPO_ROOT / "data")
