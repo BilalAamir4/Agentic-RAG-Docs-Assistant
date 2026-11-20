@@ -82,3 +82,23 @@ def test_m10_runtime_modules_are_runtime_safe(module: str) -> None:
     modules: list[str] = json.loads(result.stdout)
     forbidden = ("ragdocs.eval", "ragdocs.ingest", "ragdocs.index.build")
     assert not any(m.startswith(forbidden) for m in modules)
+
+
+@pytest.mark.parametrize(
+    "module", ["ragdocs.providers.errors", "ragdocs.pipelines.agentic.pipeline"]
+)
+def test_m11_error_classifier_is_runtime_safe(module: str) -> None:
+    """errors.py imports no ragdocs module, and the agentic pipeline stays runtime-safe (M11)."""
+    script = f"import json, sys\nimport {module}\nprint(json.dumps(sorted(sys.modules.keys())))\n"
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    modules: list[str] = json.loads(result.stdout)
+    forbidden = ("ragdocs.eval", "ragdocs.ingest", "ragdocs.index.build")
+    assert not any(m.startswith(forbidden) for m in modules)
+    if module == "ragdocs.providers.errors":
+        assert [m for m in modules if m.startswith("ragdocs")] == [
+            "ragdocs",
+            "ragdocs.providers",
+            "ragdocs.providers.errors",
+        ]

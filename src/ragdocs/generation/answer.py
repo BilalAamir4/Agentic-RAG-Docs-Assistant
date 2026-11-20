@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from ragdocs.generation.prompts import (
@@ -159,12 +159,20 @@ def generate_answer(
     question: str,
     chunks: Sequence[RetrievedChunk | Chunk],
     llm: StructuredLLM,
+    extra_messages: list[BaseMessage] | None = None,
 ) -> tuple[Answer, dict[str, Any]]:
-    """Build messages from prompts, invoke structured LLM, and validate answer."""
+    """Build messages from prompts, invoke structured LLM, and validate answer.
+
+    The messages are the shared system prompt and the user turn with the question and
+    numbered excerpts. extra_messages (M11), when given, are appended after them in
+    order; with None the sent messages are exactly the ones above.
+    """
     context = format_context(chunks)
-    messages = [
+    messages: list[BaseMessage] = [
         SystemMessage(content=ANSWER_SYSTEM_PROMPT),
         HumanMessage(content=ANSWER_USER_TEMPLATE.format(question=question, context=context)),
     ]
+    if extra_messages:
+        messages.extend(extra_messages)
     draft = llm.invoke(messages)
     return validate_answer(draft, chunks)

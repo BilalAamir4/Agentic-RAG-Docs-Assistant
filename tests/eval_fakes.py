@@ -137,7 +137,10 @@ class FakePipeline:
         self.answers = answers or DEFAULT_ANSWERS
         self.questions: list[str] = []
         self.fail_on: set[str] = set()
-        self.fail_message = "BadRequestError: 400"
+        self.fail_message = (
+            "BadRequestError: Error code: 400 - {'error': {'message': 'Failed to validate JSON.', "
+            "'type': 'invalid_request_error', 'code': 'json_validate_failed'}}"
+        )
 
     def stream(
         self,

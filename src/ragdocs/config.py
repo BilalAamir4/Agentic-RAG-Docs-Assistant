@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     rate_limit_per_ip_per_hour: int = 20
     daily_global_cap: int = 300
     max_query_rewrites: int = 1
+    # Self-RAG (M11): regenerations allowed per question after verify_answer rejects
+    # an answer (D27 call bound).
     max_regenerations: int = 1
     # Structured output for Groq answer and grader calls (M08, D23). json_schema with
     # strict=True uses Groq constrained decoding (gpt-oss-20b and gpt-oss-120b only).
@@ -194,6 +196,9 @@ class Settings(BaseSettings):
     eval_path: Path = Field(default_factory=lambda: REPO_ROOT / "data" / "eval" / "eval_set.jsonl")
     results_dir: Path = Field(default_factory=lambda: REPO_ROOT / "results")
     cache_dir: Path = Field(default_factory=lambda: REPO_ROOT / "cache")
+    # Evidence-backed error-kind overrides for stored failed attempts (M11 S1), read
+    # by ragdocs.eval.report from results_dir; a missing file means no overrides.
+    error_reclassifications_file: str = "error_reclassifications.json"
 
     def require(self, name: str) -> str:
         """Return the secret value or raise RuntimeError naming the missing env var."""

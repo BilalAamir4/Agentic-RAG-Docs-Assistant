@@ -214,6 +214,12 @@
 - **Measurement:** every eval run records `structured_output_failures` per item (failed attempts before success, from <run>/failed_attempts.jsonl, so counts survive pauses) and `rate_limited_attempts` (attempts that failed with RateLimitError, counted separately), and summary.md reports both.
 - **Reason:** The function-calling failures surface to users as error events, and the eval had been scoring only the attempt that succeeded, which hid the failure rate.
 - **Date:** 2026-11-16
+- **Update (M11 S1, 2026-11-21): failed attempts are counted by kind.** M10 found that structured_output_failures counted every failed attempt that was not a 429 (runner.py build_record), so corrective's q043 (a Tavily connection error) was counted as a structured-output failure.
+  - Kinds (ragdocs.providers.errors): structured_output (groq 400 with body error.code json_validate_failed, OutputParserException, pydantic ValidationError), rate_limit, transient (connection, timeout, 5xx), permanent (auth, plan limit, other 4xx), unclassified.
+  - New runs store FailedAttempt.kind. It comes from the agentic error event's data["error_kind"] (the message stays the class name), or from the message when the event has none (baseline).
+  - The report recomputes every count from the stored attempts. structured_output_failures counts only structured_output. New per-item fields and summary rows: transient_call_errors, permanent_call_errors, unclassified_call_errors. A stored message that does not identify a kind on its own (a bare "BadRequestError" or "WebSearchError") is unclassified.
+  - results/error_reclassifications.json holds evidence-backed overrides for stored attempts (human decision). The report applies them after message classification, and every summary that uses one carries a note. Run folders are never rewritten. Entries: corrective-20261120-1852 q049 structured_output (M10 S3 additional facts 3: json_validate_failed) and q043 transient (M10 S3 Step 1: ConnectionError, status None).
+  - Effect: corrective structured_output_failures 2 -> 1 (items 2/50 -> 1/50), transient 0 -> 1. Both baseline runs are unchanged.
 
 ### D24 Budget File Contract
 - **Decision:** One on-disk format for cache/budget.json, written by both the main venv (ragdocs.eval.throttle.BudgetStore, BudgetRecorder) and the isolated RAGAS venv (tools/ragas_budget.py).
@@ -240,3 +246,22 @@
 - **Trace naming addition:** the Tavily call inside the web_search node runs as "tavily_search" (run_type tool), so it does not nest under the node run of the same name (D22; human choice, M10 S2).
 - **Reason:** One machine-readable field lets M13 colour every decision consistently across corrective and self-RAG, and lets tests assert routing without parsing messages.
 - **Date:** 2026-11-20
+
+### D26 Self-RAG Structured-Call Failure Policy
+- **Decision:** What self_rag does when one of its new structured LLM calls (decide_retrieval, verify_answer, regenerate) fails.
+- **Choice:**
+  - decide_retrieval fails: needs_docs = true, and the decision event has outcome "info". Reason: retrieving costs at most one extra retrieval and a grading call, while skipping retrieval on a broken decision would answer without documentation.
+  - verify_answer fails (on the first or the second verification): keep the current answer, record the failure, outcome "info", route to END. Never abstain because a check broke. Reason: a broken check is not evidence that the answer is wrong.
+  - regenerate fails: abstain with abstain_reason "regenerate_failed", outcome "stop". Reason: regenerate runs only after the verifier rejected the answer, so a failed regeneration leaves only an answer the verifier rejected.
+  - No node retries a failed structured call.
+  - Every caught failure counts in the item's structured_output_failures and is appended to PipelineResult.diagnostics["fallbacks"] as "decide_failed", "verify_failed" or "regenerate_failed". The decision event of the failed node also carries data["fallback"] with the same value, so the trace and the UI show it; the report reads diagnostics only.
+  - Caught failures are exactly those for which ragdocs.providers.errors.is_structured_output_error is True. Rate-limit, auth and connection errors are not caught by these fallbacks and propagate exactly as in corrective (one error event; the eval runner's existing handling).
+- **Storage:** PipelineResult.diagnostics (dict, default empty, left out of dumps when empty). Only self_rag copies graph-state diagnostics into it, so baseline and corrective results serialise byte-identically to M10.
+- **Method:** the new calls use the D23 method (with_structured_output(schema, method="json_schema", strict=True) through Settings.structured_output_method and structured_output_strict).
+- **Date:** 2026-11-21
+
+### D27 Self-RAG LLM Call Bound
+- **Decision:** The maximum number of LLM calls per self_rag question.
+- **Choice:** With Settings.max_query_rewrites = 1 and Settings.max_regenerations = 1, the worst case is decide 1 + grade 2 + rewrite 1 + generate 1 + verify 2 + regenerate 1 = 8 calls. Fallbacks (D26) add no calls. Corrective's bound stays 4 (grade 2 + rewrite 1 + generate 1).
+- **Reason:** A fixed bound keeps Groq quota planning and latency predictable, and tests can assert it.
+- **Date:** 2026-11-21

@@ -20,6 +20,7 @@ from pydantic import SecretStr
 
 from ragdocs.config import REPO_ROOT, Settings, get_settings
 from ragdocs.eval.budget_recorder import install_budget_recorder, recorder_active
+from ragdocs.eval.failures import attempt_kind, count_kinds
 from ragdocs.eval.scoring import judge_eligible, score_item
 from ragdocs.eval.throttle import (
     DailyLimitReached,
@@ -34,6 +35,7 @@ from ragdocs.eval.throttle import (
     wait_all,
 )
 from ragdocs.io_utils import append_jsonl, read_json, read_jsonl, write_json
+from ragdocs.providers.errors import classify_message
 from ragdocs.providers.usage import TokenUsage
 from ragdocs.schemas import (
     EvalItem,
@@ -253,7 +255,9 @@ def _stream_item(
             error = final.message if final is not None else "pipeline produced no events"
             run.set_error(error)
             utc = datetime.now(UTC).isoformat(timespec="seconds")
-            return None, FailedAttempt(stage=stage, message=error, utc=utc), run.run_id
+            kind = final.data.get("error_kind") if final is not None else None
+            failure = FailedAttempt(stage=stage, message=error, utc=utc, kind=kind)
+            return None, failure, run.run_id
         result = PipelineResult.model_validate(final.data)
         run.set_outputs({"answer": result.answer.text, "abstained": result.answer.abstained})
         return result, None, run.run_id
@@ -270,9 +274,12 @@ def build_record(
     """Assemble one per_question.jsonl line; failed lists earlier failed attempts."""
     failed = failed or []
     scores = score_item(item, result, usage, settings.eval_context_k)
-    rate_limited = [f for f in failed if is_rate_limit(f.message, settings)]
-    scores.structured_output_failures = len(failed) - len(rate_limited)
-    scores.rate_limited_attempts = len(rate_limited)
+    # Counted by kind (M11 S1): structured_output, rate_limit, transient, permanent and
+    # unclassified each go to their own field (ragdocs.eval.failures.KIND_FIELDS).
+    prefixes = settings.rate_limit_error_prefixes
+    kinds = [attempt_kind(f, prefixes) for f in failed]
+    for field, count in count_kinds(kinds).items():
+        setattr(scores, field, count)
     return EvalRecord(
         id=item.id,
         category=item.category,
@@ -352,6 +359,10 @@ def _run_one(
             return build_record(item, result, usage_record, run_id, settings, failed)
         if failure is None:
             failure = FailedAttempt(stage="unknown", message="unknown error", utc="")
+        if failure.kind is None:
+            # No error_kind on the event (for example the baseline): classify the message.
+            kind = classify_message(failure.message, settings.rate_limit_error_prefixes)
+            failure = failure.model_copy(update={"kind": kind})
         append_jsonl(run_dir / FAILED_ATTEMPTS_FILE, {"id": item.id, **failure.model_dump()})
         error = failure.message
         if is_rate_limit(error, settings):

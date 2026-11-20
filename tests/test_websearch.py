@@ -6,9 +6,13 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import requests
 from eval_fakes import make_settings
-from tavily import InvalidAPIKeyError, UsageLimitExceededError
+from tavily import BadRequestError, InvalidAPIKeyError, UsageLimitExceededError
+from tavily.errors import ForbiddenError
+from tavily.errors import TimeoutError as TavilyTimeoutError
 
+from ragdocs.providers.errors import error_kind
 from ragdocs.providers.websearch import TavilySearch, WebSearchAuthError, WebSearchError
 
 FAKE_KEY = "tvly-SECRET-test-key-123"
@@ -129,3 +133,86 @@ def test_drops_off_domain_results(tmp_path: Path, caplog: pytest.LogCaptureFixtu
     assert outcome.dropped_off_domain == [urls[1]] and outcome.raw_urls == urls
     assert "Dropped 1 off-domain" in caplog.text
     assert [r["url"] for r in ws.search("q")] == [urls[0], urls[2]]
+
+
+# M11 S1: connection errors and timeouts are retried like 429 and 5xx; each
+# WebSearchError carries a kind for ragdocs.providers.errors.error_kind.
+
+
+def test_connection_error_then_success_takes_two_attempts(tmp_path: Path) -> None:
+    fake = FakeTavily(
+        [_result("https://docs.langchain.com/a")],
+        errors=[requests.exceptions.ConnectionError("connection reset")],
+    )
+    ws, sleeps, _ = _search(tmp_path, fake)
+    assert len(ws.search("q")) == 1
+    assert len(fake.calls) == 2 and sleeps == [1.0]
+
+
+def test_connection_error_on_every_attempt_raises_transient(tmp_path: Path) -> None:
+    fake = FakeTavily([], errors=[requests.exceptions.ConnectionError("down")] * 3)
+    ws, sleeps, _ = _search(tmp_path, fake)
+    with pytest.raises(WebSearchError, match="after 3 attempt") as info:
+        ws.search("q")
+    assert len(fake.calls) == 3 and sleeps == [1.0, 2.0]
+    assert info.value.kind == "transient" and error_kind(info.value) == "transient"
+
+
+def test_timeout_is_retried_then_raises_transient(tmp_path: Path) -> None:
+    fake = FakeTavily([], errors=[TavilyTimeoutError(60)] * 3)
+    ws, sleeps, _ = _search(tmp_path, fake)
+    with pytest.raises(WebSearchError) as info:
+        ws.search("q")
+    assert len(fake.calls) == 3 and sleeps == [1.0, 2.0]
+    assert info.value.kind == "transient"
+
+
+def test_timeout_then_success(tmp_path: Path) -> None:
+    fake = FakeTavily([_result("https://docs.langchain.com/a")], errors=[TavilyTimeoutError(60)])
+    ws, sleeps, _ = _search(tmp_path, fake)
+    assert len(ws.search("q")) == 1 and len(fake.calls) == 2 and sleeps == [1.0]
+
+
+def test_401_raises_after_one_attempt_as_permanent(tmp_path: Path) -> None:
+    fake = FakeTavily([], errors=[InvalidAPIKeyError("bad key")])
+    ws, sleeps, _ = _search(tmp_path, fake)
+    with pytest.raises(WebSearchAuthError) as info:
+        ws.search("q")
+    assert len(fake.calls) == 1 and sleeps == []
+    assert info.value.kind == "permanent" and error_kind(info.value) == "permanent"
+
+
+@pytest.mark.parametrize("status", [403, 432, 433])
+def test_plan_limit_is_permanent_without_retry(tmp_path: Path, status: int) -> None:
+    fake = FakeTavily([], errors=[ForbiddenError(f"status {status}")])
+    ws, sleeps, _ = _search(tmp_path, fake)
+    with pytest.raises(WebSearchError) as info:
+        ws.search("q")
+    assert len(fake.calls) == 1 and sleeps == []
+    assert info.value.kind == "permanent"
+
+
+def test_400_is_permanent_without_retry(tmp_path: Path) -> None:
+    fake = FakeTavily([], errors=[BadRequestError("bad query")])
+    ws, sleeps, _ = _search(tmp_path, fake)
+    with pytest.raises(WebSearchError) as info:
+        ws.search("q")
+    assert len(fake.calls) == 1 and sleeps == []
+    assert info.value.kind == "permanent"
+
+
+def test_429_and_5xx_after_retries_are_transient(tmp_path: Path) -> None:
+    for first in (UsageLimitExceededError("x"), HTTPStatusError(503)):
+        fake = FakeTavily([], errors=[first] * 3)
+        ws, _, _ = _search(tmp_path, fake)
+        with pytest.raises(WebSearchError) as info:
+            ws.search("q")
+        assert info.value.kind == "transient"
+
+
+def test_other_http_status_is_permanent(tmp_path: Path) -> None:
+    fake = FakeTavily([], errors=[HTTPStatusError(404)])
+    ws, _, _ = _search(tmp_path, fake)
+    with pytest.raises(WebSearchError) as info:
+        ws.search("q")
+    assert info.value.kind == "permanent"

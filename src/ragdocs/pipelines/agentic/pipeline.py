@@ -13,6 +13,7 @@ from typing import Any
 
 from ragdocs.pipelines.agentic.graph import Mode, build_default_deps, build_graph
 from ragdocs.pipelines.agentic.state import AgenticDeps, initial_state
+from ragdocs.providers.errors import error_kind
 from ragdocs.providers.llm import CallCounter
 from ragdocs.schemas import PipelineResult, TraceEvent
 from ragdocs.tracing import TracedRun, traced_run
@@ -57,7 +58,8 @@ class AgenticPipeline:
         and data=PipelineResult.model_dump(); its trace holds every yielded event in
         yield order with the answer event last, as in BaselinePipeline. On any exception
         (including GraphRecursionError) one 'error' event with the exception class name
-        only is yielded and the stream stops.
+        only is yielded and the stream stops; its data["error_kind"] is
+        ragdocs.providers.errors.error_kind(exc).
         """
         metadata = {"pipeline": self.name, **(run_metadata or {})}
         with traced_run(
@@ -117,7 +119,10 @@ class AgenticPipeline:
         except Exception as exc:
             message = type(exc).__name__
             parent.set_error(message)
-            yield TraceEvent(type="error", node="error", message=message, t_ms=t_ms())
+            # error_kind (M11 S1) lets the eval runner count failures by kind; the message
+            # stays the class name only.
+            data = {"error_kind": error_kind(exc)}
+            yield TraceEvent(type="error", node="error", message=message, data=data, t_ms=t_ms())
 
 
 def _parent_outputs(result: PipelineResult, diagnostics: dict[str, Any]) -> dict[str, Any]:

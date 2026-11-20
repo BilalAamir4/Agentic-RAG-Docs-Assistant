@@ -18,6 +18,7 @@ from ragdocs.eval.report import (
     RAGAS_METRICS,
     correctness_of,
     format_cell,
+    reclassification_notes,
     rows_for,
     summarize,
 )
@@ -238,6 +239,8 @@ def render_comparison(run_dirs: list[Path], settings: Settings | None = None) ->
         "Rates are rate (count/n); correctness n = every answerable item."
     )
     lines += ["", "## Overall", ""] + _table(summaries, "overall", None)
+    notes = reclassification_notes(summaries)
+    lines += ["", *notes] if notes else []
     for cat in CATEGORIES:
         lines += ["", f"## {cat}", ""] + _table(summaries, "per_category", cat)
     lines += ["", f"## Changed questions (against {summaries[0]['run']})", ""]

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "about": "Evidence-backed error-kind overrides for stored failed attempts whose message cannot show the kind (M11 S1, human decision 2026-11-21). Applied by ragdocs.eval.report after message classification; every summary that uses one says so in a note. Run folders are never rewritten.",
+  "overrides": [
+    {
+      "run": "results/runs/corrective-20261120-1852",
+      "item": "q043",
+      "kind": "transient",
+      "utc": "2026-11-20T19:59:50+00:00",
+      "evidence": [
+        "docs/progress/M10-corrective-rag.md, section 'S3 Step 1: eval run', failed attempts, q043: LangSmith tavily_search run gives 'Tavily search failed after 1 attempt(s): ConnectionError (status None)'",
+        "LangSmith run id 01a1fa8c-234c-7460-9f93-b2217c3a89d1 (per_question.jsonl langsmith_run_id; the eval_item run of the attempt that succeeded)"
+      ]
+    },
+    {
+      "run": "results/runs/corrective-20261120-1852",
+      "item": "q049",
+      "kind": "structured_output",
+      "utc": "2026-11-20T20:07:32+00:00",
+      "evidence": [
+        "docs/progress/M10-corrective-rag.md, section 'S3 additional facts', item 3) q049: Groq 400, type invalid_request_error, code json_validate_failed, on rewrite_query's structured RewrittenQuery call",
+        "LangSmith run id 01a1fa93-2f8a-7913-b630-4147fc269192 (per_question.jsonl langsmith_run_id; the eval_item run of the attempt that succeeded)"
+      ]
+    }
+  ]
+}

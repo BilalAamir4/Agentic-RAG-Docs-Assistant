@@ -11,6 +11,9 @@ Verified against tavily-python 0.8.5 (.venv/Lib/site-packages/tavily):
   InvalidAPIKeyError; 403, 432, 433 ForbiddenError (tavily.errors); 400
   BadRequestError; any other status requests.HTTPError (an OSError subclass, with
   .response.status_code); a request timeout raises tavily.errors.TimeoutError.
+- A connection error is not caught by tavily: requests.exceptions.ConnectionError (an
+  OSError with no response) reaches the caller (tavily.py line 238 only catches
+  requests.exceptions.Timeout). M11 S1 retries it and timeouts like 429 and 5xx.
 """
 
 import logging
@@ -18,6 +21,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import requests
 from tavily import BadRequestError, InvalidAPIKeyError, TavilyClient, UsageLimitExceededError
 from tavily.errors import ForbiddenError
 from tavily.errors import TimeoutError as TavilyTimeoutError
@@ -33,11 +37,25 @@ KEY_ENV_VAR = "TAVILY_API_KEY"
 
 
 class WebSearchError(RuntimeError):
-    """Tavily search failed (after retries for 429 and 5xx). Never contains the key."""
+    """Tavily search failed. Never contains the key.
+
+    kind (M11 S1, read by ragdocs.providers.errors.error_kind): "transient" for
+    connection errors, timeouts and 429/5xx after the retries; "permanent" for
+    plan-limit (403/432/433), 400, auth and other HTTP statuses; "unclassified" else.
+    """
+
+    def __init__(self, message: str, kind: str = "unclassified") -> None:
+        """Store the message and the error kind."""
+        super().__init__(message)
+        self.kind = kind
 
 
 class WebSearchAuthError(WebSearchError):
     """Tavily rejected the API key."""
+
+    def __init__(self, message: str) -> None:
+        """Auth errors are always permanent."""
+        super().__init__(message, kind="permanent")
 
 
 def _default_client(api_key: str) -> Any:
@@ -53,8 +71,18 @@ def _status(exc: Exception) -> int | None:
     return getattr(response, "status_code", None)
 
 
-def _retryable(status: int | None) -> bool:
-    """429 and 5xx are retried."""
+def _is_connection_or_timeout(exc: Exception) -> bool:
+    """requests connection errors and timeouts, and tavily's TimeoutError (no HTTP status)."""
+    return isinstance(
+        exc, TavilyTimeoutError | requests.exceptions.ConnectionError | requests.exceptions.Timeout
+    )
+
+
+def _retryable(exc: Exception) -> bool:
+    """429, 5xx, connection errors and timeouts are retried."""
+    if _is_connection_or_timeout(exc):
+        return True
+    status = _status(exc)
     return status is not None and (status == 429 or 500 <= status < 600)
 
 
@@ -82,7 +110,11 @@ class TavilySearch:
         }
 
     def _call(self, query: str) -> dict[str, Any]:
-        """One search with retries on 429 and 5xx (backoff 1 s, 2 s, ...)."""
+        """One search with retries on 429, 5xx, connection errors and timeouts.
+
+        Settings.web_search_max_attempts attempts in total, backoff starting at
+        Settings.web_search_backoff_s and doubling (1 s, 2 s, ...).
+        """
         attempts = self.settings.web_search_max_attempts
         delay = self.settings.web_search_backoff_s
         for attempt in range(1, attempts + 1):
@@ -95,21 +127,44 @@ class TavilySearch:
             except ForbiddenError:
                 raise WebSearchError(
                     f"Tavily refused the request (403/432/433: forbidden or plan limit); "
-                    f"check {KEY_ENV_VAR} and its plan"
+                    f"check {KEY_ENV_VAR} and its plan",
+                    kind="permanent",
                 ) from None
-            except (BadRequestError, TavilyTimeoutError) as exc:
-                raise WebSearchError(f"Tavily search failed: {type(exc).__name__}") from None
-            except (UsageLimitExceededError, OSError) as exc:
-                status = _status(exc)
-                if not _retryable(status) or attempt == attempts:
-                    raise WebSearchError(
-                        f"Tavily search failed after {attempt} attempt(s): "
-                        f"{type(exc).__name__} (status {status})"
-                    ) from None
-                logger.warning("Tavily status %s, retry %d in %.1f s", status, attempt, delay)
+            except BadRequestError as exc:
+                raise WebSearchError(
+                    f"Tavily search failed: {type(exc).__name__}", kind="permanent"
+                ) from None
+            except (UsageLimitExceededError, TavilyTimeoutError, OSError) as exc:
+                self._raise_unless_retry(exc, attempt, attempts)
+                logger.warning(
+                    "Tavily %s (status %s), retry %d in %.1f s",
+                    type(exc).__name__,
+                    _status(exc),
+                    attempt,
+                    delay,
+                )
                 self._sleep(delay)
                 delay *= 2
         raise WebSearchError("Tavily search made no attempt")  # attempts < 1
+
+    @staticmethod
+    def _raise_unless_retry(exc: Exception, attempt: int, attempts: int) -> None:
+        """Raise WebSearchError when exc is not retryable or this was the last attempt."""
+        status = _status(exc)
+        retryable = _retryable(exc)
+        if retryable and attempt < attempts:
+            return
+        if retryable:
+            kind = "transient"
+        elif status is not None:
+            kind = "permanent"
+        else:
+            kind = "unclassified"
+        raise WebSearchError(
+            f"Tavily search failed after {attempt} attempt(s): "
+            f"{type(exc).__name__} (status {status})",
+            kind=kind,
+        ) from None
 
     def search_with_diagnostics(self, query: str) -> WebSearchOutcome:
         """Search and drop results whose host is not docs_domain or a subdomain of it."""

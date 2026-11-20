@@ -131,6 +131,10 @@ class PipelineResult(BaseModel):
     llm_calls: int
     latency_ms: int
     used_web: bool = False
+    # Pipeline diagnostics (M11). Only self_rag fills it (diagnostics["fallbacks"]:
+    # decide_failed, verify_failed, regenerate_failed). Left out of dumps when empty, so
+    # baseline and corrective results serialise exactly as before M11.
+    diagnostics: dict[str, Any] = Field(default_factory=dict, exclude_if=lambda v: not v)
 
 
 # Evaluation records (M08). Written by ragdocs.eval.runner, read by report, compare and
@@ -184,6 +188,24 @@ class FailedAttempt(BaseModel):
     stage: str
     message: str
     utc: str
+    # Error kind (ragdocs.providers.errors.ErrorKind), set by the runner from M11 S1;
+    # None in older runs, whose kind is classified from the message.
+    kind: str | None = None
+
+
+class ErrorReclassification(BaseModel):
+    """One evidence-backed error-kind override for a stored failed attempt (M11 S1).
+
+    run is the run folder (repository-relative, forward slashes; matched by folder name),
+    item the eval id, kind the corrected kind, evidence where the kind is shown, and utc,
+    when set, the failed attempt's utc (otherwise every failed attempt of the item).
+    """
+
+    run: str
+    item: str
+    kind: Literal["structured_output", "rate_limit", "transient", "permanent", "unclassified"]
+    evidence: list[str] = Field(min_length=1)
+    utc: str | None = None
 
 
 class ItemScores(BaseModel):
@@ -205,10 +227,15 @@ class ItemScores(BaseModel):
     used_web: bool
     tokens_in: int
     tokens_out: int
-    # Failed attempts before success (M08, D23); None in runs made before the field.
+    # Failed attempts before success whose kind is structured_output (M08, D23; counted
+    # by kind since M11 S1, ragdocs.eval.failures); None in runs made before the field.
     structured_output_failures: int | None = None
     # Failed attempts caused by provider rate limits (not counted above).
     rate_limited_attempts: int | None = None
+    # Other failed attempts by kind (M11 S1); None in runs made before the fields.
+    transient_call_errors: int | None = None
+    permanent_call_errors: int | None = None
+    unclassified_call_errors: int | None = None
 
 
 class EvalRecord(BaseModel):

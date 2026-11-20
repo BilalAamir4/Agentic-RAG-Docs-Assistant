@@ -20,11 +20,19 @@ import numpy as np
 
 from ragdocs.config import get_settings
 from ragdocs.docs_urls import CHUNK_META_FILE, url_to_doc_ref
+from ragdocs.eval.failures import (
+    KIND_FIELDS,
+    count_kinds,
+    item_kinds,
+    load_overrides,
+    overrides_for_run,
+    overrides_path,
+)
 from ragdocs.eval.judge import load_records
 from ragdocs.eval.metrics import hit_at_k
 from ragdocs.eval.scoring import EffectiveVerdicts, effective_verdicts
 from ragdocs.io_utils import read_json, read_jsonl, write_json, write_text
-from ragdocs.schemas import EvalRecord, Evidence, PipelineResult
+from ragdocs.schemas import ErrorReclassification, EvalRecord, Evidence, PipelineResult
 
 CATEGORIES = ("single", "multi", "version", "unanswerable")
 CONTEXT_LABEL = "on contexts given to the generator"
@@ -40,6 +48,9 @@ RAGAS_ROWS: list[tuple[str, str, str]] = [
 
 
 FIRST_RETRIEVAL_K = 5
+# Self-RAG fallback types in diagnostics["fallbacks"] (M11, D26), in display order.
+FALLBACK_TYPES = ("decide_failed", "verify_failed", "regenerate_failed")
+RECLASSIFICATIONS_LABEL = "results/error_reclassifications.json"
 # Pipelines whose generator contexts are exactly the top chunks of their first (and
 # only) retrieval, so first_retrieval_hit@5 equals context_hit@5 by construction (D22).
 # The baseline's stored retrieval event lists url but no chunk_id (M10 S1 check 1h;
@@ -162,8 +173,16 @@ def _answer_metrics(answerable: list[EvalRecord], ev: EffectiveVerdicts) -> dict
     }
 
 
-def _metrics(records: list[EvalRecord], ev: EffectiveVerdicts) -> dict[str, Any]:
-    """All summary fields over one subset of records."""
+def _metrics(
+    records: list[EvalRecord],
+    ev: EffectiveVerdicts,
+    kinds: Mapping[str, list[str]] | None = None,
+) -> dict[str, Any]:
+    """All summary fields over one subset of records.
+
+    kinds maps item id to the kind of each failed attempt (record_kinds); by default the
+    kinds come from the stored attempts without overrides.
+    """
     answerable = [r for r in records if r.category != "unanswerable"]
     unanswerable = [r for r in records if r.category == "unanswerable"]
     latencies = [r.scores.latency_ms for r in records]
@@ -185,30 +204,61 @@ def _metrics(records: list[EvalRecord], ev: EffectiveVerdicts) -> dict[str, Any]
             "used_web": rate(sum(1 for r in records if r.scores.used_web), len(records)),
         }
     )
-    out.update(_failure_metrics(records))
+    if kinds is None:
+        kinds, _ = record_kinds(records)
+    out.update(_failure_metrics(records, kinds))
+    out["structured_call_fallbacks"] = _fallback_metrics(records)
     return out
 
 
-def _failure_metrics(records: list[EvalRecord]) -> dict[str, Any]:
-    """Structured-output failures (failed attempts before success).
+def record_kinds(
+    records: Sequence[EvalRecord], overrides: Sequence[ErrorReclassification] = ()
+) -> tuple[dict[str, list[str]], list[ErrorReclassification]]:
+    """Kind of every stored failed attempt per item id, and the overrides applied.
 
-    n counts records that carry the field, so runs made before it show '-'.
+    Kinds come from FailedAttempt.kind, else from the message (ragdocs.eval.failures);
+    overrides (already filtered to this run) are applied last.
     """
-    counts = [
-        r.scores.structured_output_failures
-        for r in records
-        if r.scores.structured_output_failures is not None
-    ]
-    limited = [
-        r.scores.rate_limited_attempts
-        for r in records
-        if r.scores.rate_limited_attempts is not None
-    ]
-    return {
-        "structured_output_failures": {"total": sum(counts), "n": len(counts)},
-        "items_with_structured_output_failures": rate(sum(1 for c in counts if c), len(counts)),
-        "rate_limited_attempts": {"total": sum(limited), "n": len(limited)},
+    prefixes = get_settings().rate_limit_error_prefixes
+    out: dict[str, list[str]] = {}
+    applied: list[ErrorReclassification] = []
+    for r in records:
+        out[r.id], used = item_kinds(r.id, r.failed_attempts, prefixes, overrides)
+        applied += used
+    return out, applied
+
+
+def _failure_metrics(records: list[EvalRecord], kinds: Mapping[str, list[str]]) -> dict[str, Any]:
+    """Failed attempts before success, counted by kind (M11 S1).
+
+    n counts records made after the structured_output_failures field existed (M08), so
+    runs made before it show '-'. Counts are recomputed from the stored attempts, not
+    read from the stored per-item scores.
+    """
+    counted = [r for r in records if r.scores.structured_output_failures is not None]
+    per_item = [count_kinds(kinds.get(r.id, [])) for r in counted]
+    n = len(counted)
+    structured = [c["structured_output_failures"] for c in per_item]
+    out: dict[str, Any] = {
+        field: {"total": sum(c[field] for c in per_item), "n": n} for field in KIND_FIELDS.values()
     }
+    out["items_with_structured_output_failures"] = rate(sum(1 for c in structured if c), n)
+    return out
+
+
+def fallbacks_of(result: PipelineResult) -> list[str]:
+    """diagnostics["fallbacks"] of a stored result; a missing key means none (M11)."""
+    return [str(f) for f in result.diagnostics.get("fallbacks", [])]
+
+
+def _fallback_metrics(records: list[EvalRecord]) -> dict[str, Any]:
+    """Items with at least one structured-call fallback, and occurrences per type."""
+    per_item = [fallbacks_of(r.result) for r in records]
+    by_type = {t: 0 for t in FALLBACK_TYPES}
+    for fallbacks in per_item:
+        for f in fallbacks:
+            by_type[f] = by_type.get(f, 0) + 1
+    return {**rate(sum(1 for f in per_item if f), len(records)), "by_type": by_type}
 
 
 def _totals(records: list[EvalRecord]) -> dict[str, Any]:
@@ -301,6 +351,9 @@ def summarize(run_dir: Path, extra_score_files: Sequence[Path] = ()) -> dict[str
     ev = effective_verdicts(run_dir, records)
     config_path = run_dir / "config.json"
     config = read_json(config_path) if config_path.is_file() else {}
+    overrides = overrides_for_run(load_overrides(overrides_path(get_settings())), run_dir)
+    kinds, applied = record_kinds(records, overrides)
+    by_cat = {c: [r for r in records if r.category == c] for c in CATEGORIES}
     summary: dict[str, Any] = {
         "run": run_dir.name,
         "pipeline": config.get("pipeline"),
@@ -308,12 +361,12 @@ def summarize(run_dir: Path, extra_score_files: Sequence[Path] = ()) -> dict[str
         "index_manifest_hash": config.get("index_manifest_hash"),
         "tracing_enabled": config.get("tracing_enabled"),
         "judge": _judge_info(run_dir, records, ev),
-        "overall": _metrics(records, ev),
-        "per_category": {
-            c: _metrics([r for r in records if r.category == c], ev) for c in CATEGORIES
-        },
+        "overall": _metrics(records, ev, kinds),
+        "per_category": {c: _metrics(by_cat[c], ev, kinds) for c in CATEGORIES},
         "totals": _totals(records),
     }
+    if applied:
+        summary["error_reclassifications"] = [o.model_dump(mode="json") for o in applied]
     _merge_ragas(run_dir, summary)
     if extra_score_files:
         summary["extra"] = _extra_scores(records, extra_score_files)
@@ -351,6 +404,19 @@ SUMMARY_ROWS: list[tuple[str, str, str]] = [
         "rate",
     ),
     ("rate-limited attempts (not counted above)", "rate_limited_attempts", "total"),
+    # M11 S1: the other failed-attempt kinds and self-RAG structured-call fallbacks.
+    (
+        "transient call errors (connection, timeout, 5xx; not counted above)",
+        "transient_call_errors",
+        "total",
+    ),
+    (
+        "permanent call errors (auth, plan limit, other 4xx; not counted above)",
+        "permanent_call_errors",
+        "total",
+    ),
+    ("unclassified call errors (not counted above)", "unclassified_call_errors", "total"),
+    ("structured-call fallbacks", "structured_call_fallbacks", "fallbacks"),
 ]
 
 
@@ -369,7 +435,31 @@ def format_cell(metrics: dict[str, Any], key: str, kind: str) -> str:
         return f"{value['total']} (n={value['n']})" if value["n"] else "-"
     if kind == "ragas":
         return "-" if value["mean"] is None else f"{value['mean']:.3f} ({value['n']})"
+    if kind == "fallbacks":
+        return format_fallbacks(value)
     return str(value)
+
+
+def format_fallbacks(value: dict[str, Any]) -> str:
+    """'rate (count/n)', then occurrences per type when any item had a fallback."""
+    text = format_rate(value)
+    if value["count"]:
+        text += "; " + ", ".join(f"{t} {c}" for t, c in value["by_type"].items())
+    return text
+
+
+def reclassification_notes(summaries: Sequence[dict[str, Any]]) -> list[str]:
+    """Footnote lines for every summary whose failure counts use an override."""
+    lines: list[str] = []
+    for s in summaries:
+        for o in s.get("error_reclassifications", []):
+            evidence = "; ".join(o["evidence"])
+            lines.append(
+                f"- Note: {s['run']} {o['item']}: failed-attempt kind set to {o['kind']} by "
+                f"{RECLASSIFICATIONS_LABEL} (the stored message cannot show it). "
+                f"Evidence: {evidence}."
+            )
+    return lines
 
 
 def _judge_lines(judge: dict[str, Any]) -> list[str]:
@@ -414,6 +504,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
     rows = rows_for([summary])
     lines += ["## Overall", "", "| Field | Value |", "|---|---|"]
     lines += [f"| {lab} | {format_cell(overall, key, kind)} |" for lab, key, kind in rows]
+    notes = reclassification_notes([summary])
+    lines += ["", *notes] if notes else []
     lines += ["", "## Per category", ""] + _category_table(summary["per_category"], rows)
     lines += ["", "## Totals (generation)", ""]
     lines += [
