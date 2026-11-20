@@ -12,6 +12,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | correct or partial (correctness >= 1) | 0.929 (39/42) |
 | mean correctness (0-2) | 1.833 (n=42) |
 | citation_support (judged items) | 1.000 (39/39) |
+| first-retrieval hit@5 (like-for-like retrieval) | 0.810 (34/42) |
 | context_hit@5 (on contexts given to the generator) | 0.810 (34/42) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.726 (n=42) |
 | mean must_mention coverage (soft signal, D15) | 0.905 (n=42) |
@@ -41,6 +42,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | correct or partial (correctness >= 1) | 0.929 (26/28) |
 | mean correctness (0-2) | 1.821 (n=28) |
 | citation_support (judged items) | 1.000 (26/26) |
+| first-retrieval hit@5 (like-for-like retrieval) | 0.786 (22/28) |
 | context_hit@5 (on contexts given to the generator) | 0.786 (22/28) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.786 (n=28) |
 | mean must_mention coverage (soft signal, D15) | 0.893 (n=28) |
@@ -70,6 +72,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | correct or partial (correctness >= 1) | 0.875 (7/8) |
 | mean correctness (0-2) | 1.750 (n=8) |
 | citation_support (judged items) | 1.000 (7/7) |
+| first-retrieval hit@5 (like-for-like retrieval) | 0.875 (7/8) |
 | context_hit@5 (on contexts given to the generator) | 0.875 (7/8) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.500 (n=8) |
 | mean must_mention coverage (soft signal, D15) | 0.875 (n=8) |
@@ -99,6 +102,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | correct or partial (correctness >= 1) | 1.000 (6/6) |
 | mean correctness (0-2) | 2.000 (n=6) |
 | citation_support (judged items) | 1.000 (6/6) |
+| first-retrieval hit@5 (like-for-like retrieval) | 0.833 (5/6) |
 | context_hit@5 (on contexts given to the generator) | 0.833 (5/6) |
 | mean context_evidence_recall@5 (on contexts given to the generator) | 0.750 (n=6) |
 | mean must_mention coverage (soft signal, D15) | 1.000 (n=6) |
@@ -128,6 +132,7 @@ Judge gemini-3.5-flash-lite, prompt version 2. Rates are rate (count/n); correct
 | correct or partial (correctness >= 1) | - |
 | mean correctness (0-2) | - |
 | citation_support (judged items) | - |
+| first-retrieval hit@5 (like-for-like retrieval) | - |
 | context_hit@5 (on contexts given to the generator) | - |
 | mean context_evidence_recall@5 (on contexts given to the generator) | - |
 | mean must_mention coverage (soft signal, D15) | - |

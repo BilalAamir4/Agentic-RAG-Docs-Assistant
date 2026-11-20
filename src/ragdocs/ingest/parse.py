@@ -6,6 +6,8 @@ from pathlib import Path
 
 import frontmatter
 
+from ragdocs.docs_urls import doc_path_to_url
+
 
 @dataclass(frozen=True)
 class ParsedDocument:
@@ -95,8 +97,7 @@ def parse_file(file_path: Path, docs_root: Path, base_url: str) -> ParsedDocumen
     root = Path(docs_root).resolve()
     rel_path = p.relative_to(root).as_posix()
 
-    doc_stem = rel_path.rsplit(".", 1)[0]
-    public_url = f"{base_url.rstrip('/')}/{doc_stem}"
+    public_url = doc_path_to_url(rel_path, base_url)
 
     raw_text = p.read_text(encoding="utf-8")
     title, body = clean_markdown_body(raw_text)

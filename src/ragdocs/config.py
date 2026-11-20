@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     google_api_key: SecretStr | None = None
     cohere_api_key: SecretStr | None = None
     tavily_api_key: SecretStr | None = None
+    tavily_api_key: SecretStr | None = None
     upstash_redis_rest_url: SecretStr | None = None
     upstash_redis_rest_token: SecretStr | None = None
 
@@ -174,6 +175,15 @@ class Settings(BaseSettings):
 
     # Documentation corpus domain (set in M02)
     docs_domain: str = "docs.langchain.com"
+    # Corrective RAG (M10). Web search results per Tavily call (restricted to
+    # docs_domain, D8); a retrieval is corrected when fewer than min_relevant_chunks
+    # chunks pass the grader; max_query_rewrites (above) caps rewrites per question.
+    web_max_results: int = 3
+    min_relevant_chunks: int = 1
+    # Tavily retries on 429 and 5xx: total attempts, and the first backoff in seconds
+    # (doubled after each failed attempt: 1 s, 2 s).
+    web_search_max_attempts: int = 3
+    web_search_backoff_s: float = 1.0
 
     # Repository paths
     data_dir: Path = Field(default_factory=lambda: REPO_ROOT / "data")

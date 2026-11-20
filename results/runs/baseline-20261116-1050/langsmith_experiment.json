@@ -16,6 +16,15 @@
       "dataset_id": "6f229f5d-8cff-45b9-840f-3ec576feb329",
       "examples": 50,
       "date": "2026-11-19T21:46:14+00:00",
+      "current": false
+    },
+    {
+      "name": "baseline-20261116-1050-r2",
+      "id": "ebe73692-136c-4fe9-b310-2484bdc29620",
+      "url": "https://smith.langchain.com/o/dc790a75-743f-467d-a940-18bb085de125/datasets/6f229f5d-8cff-45b9-840f-3ec576feb329/compare?selectedSessions=ebe73692-136c-4fe9-b310-2484bdc29620",
+      "dataset_id": "6f229f5d-8cff-45b9-840f-3ec576feb329",
+      "examples": 50,
+      "date": "2026-11-20T08:33:53+00:00",
       "current": true
     }
   ]

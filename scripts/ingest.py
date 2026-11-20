@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ragdocs.docs_urls import DOCS_BASE_URL
 from ragdocs.ingest.chunk import chunk_document
 from ragdocs.ingest.fetch import fetch_repo
 from ragdocs.ingest.parse import list_in_scope_files, parse_file
@@ -23,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REPO_URL = "https://github.com/langchain-ai/docs"
 DEFAULT_COMMIT = "a6e223d2f67558caa20589a03443e918b582943b"
 DEFAULT_DOCS_ROOT = "src/oss/langgraph"
-DEFAULT_BASE_URL = "https://docs.langchain.com/oss/python/langgraph"
+DEFAULT_BASE_URL = DOCS_BASE_URL
 
 
 def run_ingest(

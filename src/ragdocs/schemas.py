@@ -78,6 +78,23 @@ class RetrievedChunk(BaseModel):
     retriever: str
 
 
+class WebResult(BaseModel):
+    """One web search result kept after the docs-domain filter (M10)."""
+
+    url: str
+    title: str
+    content: str
+
+
+class WebSearchOutcome(BaseModel):
+    """Web search results plus the diagnostics of the defensive domain filter (M10)."""
+
+    query: str
+    results: list[WebResult]
+    raw_urls: list[str] = Field(default_factory=list)
+    dropped_off_domain: list[str] = Field(default_factory=list)
+
+
 class Citation(BaseModel):
     """A citation reference linking an answer statement to source documentation."""
 

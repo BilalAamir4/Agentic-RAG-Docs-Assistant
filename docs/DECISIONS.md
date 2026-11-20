@@ -74,6 +74,7 @@
 - **Decision:** Web search tool for corrective retrieval.
 - **Choice:** Tavily web search restricted to the official docs domain as the corrective fallback.
 - **Reason:** Restricts external grounding strictly to authoritative technical documentation.
+- **Update (M10 S1, 2026-11-20): implementation.** src/ragdocs/providers/websearch.py TavilySearch (tavily-python 0.8.5) sends include_domains=[Settings.docs_domain], max_results=Settings.web_max_results (3), search_depth="basic" (1 credit). include_domains_mode is left at its server default, "restrict" (https://docs.tavily.com/documentation/api-reference/endpoint/search). A defensive filter also drops any result whose host is not docs_domain or a subdomain and reports the drops (WebSearchOutcome.dropped_off_domain). 429 and 5xx are retried (3 attempts, 1 s then 2 s); a missing TAVILY_API_KEY fails at construction because tavily-python otherwise falls back to keyless mode. Live probe (3 queries, 9 URLs): all on docs.langchain.com; 2 of 9 were outside the ingested LangGraph corpus (oss/python/langchain, oss/python/deepagents), and none carried an #anchor.
 
 ### D9 Evaluation Methodology
 - **Decision:** Evaluation metrics and judge design.
@@ -197,6 +198,7 @@
 - **Choice:** For corrective and self-RAG, contexts are the chunks the grader kept plus web results, so metrics computed on contexts (`context_hit@5`, `context_evidence_recall@5`, RAGAS context precision and recall) partly measure the grader's filtering. They are labelled "on contexts given to the generator". `first_retrieval_hit@5`, computed from each run's first retrieval event, is the like-for-like retrieval comparison across pipelines.
 - **Trace naming:** Pipeline parent runs are named after the pipeline, the LangGraph run inside them is named "graph", and retrieval runs are named "hybrid_retrieve", so no run nests under one with the same name.
 - **Reason:** Keeps retrieval comparisons fair across pipelines that filter contexts differently.
+- **Update (M10 S1, 2026-11-20): computation.** ragdocs.eval.report.first_retrieval_hit_at_5 takes the item's first `retrieval` TraceEvent, resolves its top 5 chunks to (doc_path, anchor) by chunk_id in data/index/chunk_meta.jsonl, else by ragdocs.docs_urls.url_to_doc_ref(url), and applies hit_at_k against the gold evidence; an answerable item with no retrieval event is a miss. The baseline's stored retrieval event has url but no chunk_id, so for pipeline "baseline" the value is computed from its contexts (equal by construction: all 50 items have one retrieval event whose 5 URLs equal the 5 context URLs in order; the URL path gives the same values). Baseline: 34/42 for both metrics. Agentic pipelines (S2) must emit chunk_id and url for every chunk in the retrieval event. summary.md and compare show the row "first-retrieval hit@5 (like-for-like retrieval)" directly above context_hit@5, and the LangSmith experiment carries feedback key first_retrieval_hit_at_5.
 - **Date:** 2026-11-15
 
 ### D23 Structured Output Method for Groq Calls

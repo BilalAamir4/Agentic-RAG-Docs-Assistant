@@ -108,7 +108,8 @@ def test_payload_contains_every_stored_score(judged_run: Path) -> None:
     assert sorted(payload) == ["q001", "q002", "q003", "q004"]
     fb = payload["q001"]["feedback"]
     assert set(fb) == {
-        "correctness", "citation_support", "context_hit_at_5", "context_evidence_recall_at_5",
+        "correctness", "citation_support", "context_hit_at_5", "first_retrieval_hit_at_5",
+        "context_evidence_recall_at_5",
         "must_mention_coverage", "llm_calls", "latency_ms", "tokens",
         "faithfulness", "response_relevancy", "context_recall",
     }  # fmt: skip

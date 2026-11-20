@@ -6,18 +6,25 @@ answerable item and count a false abstention as correctness 0, so a pipeline tha
 abstains more cannot look more accurate. When the run folder has ragas_summary.json
 (M09), the four RAGAS metrics are added as "mean (n)" rows; n is the number of
 eligible items scored (errored and NaN items excluded).
+
+first_retrieval_hit@5 (M10, D22) is computed from each item's stored trace, not from
+per_question scores: see first_retrieval_hit_at_5.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from ragdocs.config import get_settings
+from ragdocs.docs_urls import CHUNK_META_FILE, url_to_doc_ref
 from ragdocs.eval.judge import load_records
+from ragdocs.eval.metrics import hit_at_k
 from ragdocs.eval.scoring import EffectiveVerdicts, effective_verdicts
 from ragdocs.io_utils import read_json, read_jsonl, write_json, write_text
-from ragdocs.schemas import EvalRecord
+from ragdocs.schemas import EvalRecord, Evidence, PipelineResult
 
 CATEGORIES = ("single", "multi", "version", "unanswerable")
 CONTEXT_LABEL = "on contexts given to the generator"
@@ -30,6 +37,67 @@ RAGAS_ROWS: list[tuple[str, str, str]] = [
     (f"RAGAS context_precision ({CONTEXT_LABEL})", "ragas_context_precision", "ragas"),
     (f"RAGAS context_recall ({CONTEXT_LABEL})", "ragas_context_recall", "ragas"),
 ]
+
+
+FIRST_RETRIEVAL_K = 5
+# Pipelines whose generator contexts are exactly the top chunks of their first (and
+# only) retrieval, so first_retrieval_hit@5 equals context_hit@5 by construction (D22).
+# The baseline's stored retrieval event lists url but no chunk_id (M10 S1 check 1h;
+# all 50 baseline items: one retrieval event whose 5 URLs equal the 5 context URLs in
+# order), so its value is computed from its contexts.
+CONTEXTS_ARE_FIRST_RETRIEVAL = frozenset({"baseline"})
+
+
+@lru_cache
+def chunk_refs(index_dir: Path | None = None) -> dict[str, Evidence]:
+    """{chunk_id: (doc_path, anchor)} from <index_dir>/chunk_meta.jsonl (default Settings)."""
+    path = Path(index_dir or get_settings().index_dir) / CHUNK_META_FILE
+    return {
+        row["chunk_id"]: Evidence(doc_path=row["doc_path"], anchor=row["anchor"])
+        for row in read_jsonl(path)
+    }
+
+
+def first_retrieval_refs(
+    result: PipelineResult, refs: Mapping[str, Evidence] | None = None
+) -> list[Evidence | None] | None:
+    """(doc_path, anchor) of the top FIRST_RETRIEVAL_K chunks of the first retrieval event.
+
+    Each chunk resolves by chunk_id in refs (default: the index's chunk_meta.jsonl),
+    else by docs_urls.url_to_doc_ref(url); None marks a chunk that resolves to nothing.
+    Returns None when the trace has no retrieval event.
+    """
+    event = next((e for e in result.trace if e.type == "retrieval"), None)
+    if event is None:
+        return None
+    out: list[Evidence | None] = []
+    for chunk in (event.data.get("chunks") or [])[:FIRST_RETRIEVAL_K]:
+        chunk_id, url = chunk.get("chunk_id"), chunk.get("url")
+        ref = None
+        if chunk_id:
+            ref = (chunk_refs() if refs is None else refs).get(chunk_id)
+        if ref is None and url:
+            ref = url_to_doc_ref(url)
+        out.append(ref)
+    return out
+
+
+def first_retrieval_hit_at_5(
+    record: EvalRecord, refs: Mapping[str, Evidence] | None = None
+) -> float:
+    """1.0 when a top-5 chunk of the item's first retrieval matches its gold evidence.
+
+    Like-for-like retrieval comparison across pipelines (D22). No retrieval event
+    counts as a miss. CONTEXTS_ARE_FIRST_RETRIEVAL pipelines use their contexts.
+    """
+    result = record.result
+    if result.pipeline in CONTEXTS_ARE_FIRST_RETRIEVAL:
+        return hit_at_k(result.contexts, record.evidence, FIRST_RETRIEVAL_K)
+    resolved = first_retrieval_refs(result, refs)
+    if resolved is None:
+        return 0.0
+    matched = [r for r in resolved if r is not None]
+    return hit_at_k(matched, record.evidence, FIRST_RETRIEVAL_K)
 
 
 def rate(count: int | float, n: int) -> dict[str, Any]:
@@ -72,6 +140,7 @@ def _answer_metrics(answerable: list[EvalRecord], ev: EffectiveVerdicts) -> dict
     corr = [correctness_of(r, ev) for r in answerable]
     judged = [ev.verdicts[r.id] for r in answerable if r.judge_eligible and r.id in ev.verdicts]
     hits = [r.scores.context_hit_at_5 or 0.0 for r in answerable]
+    first_hits = [first_retrieval_hit_at_5(r) for r in answerable]
     recall = [r.scores.context_evidence_recall_at_5 or 0.0 for r in answerable]
     coverage = [
         r.scores.must_mention_coverage
@@ -85,6 +154,7 @@ def _answer_metrics(answerable: list[EvalRecord], ev: EffectiveVerdicts) -> dict
         "correct_or_partial": rate(sum(1 for c in corr if c is not None and c >= 1), n),
         "mean_correctness": {"mean": (sum(c or 0 for c in corr) / n) if n else None, "n": n},
         "citation_support": rate(sum(v.citation_support for v in judged), len(judged)),
+        "first_retrieval_hit@5": rate(sum(first_hits), n),
         "context_hit@5": rate(sum(hits), n),
         "context_evidence_recall@5": mean(recall),
         "must_mention_coverage": mean(coverage),
@@ -258,6 +328,7 @@ SUMMARY_ROWS: list[tuple[str, str, str]] = [
     ("correct or partial (correctness >= 1)", "correct_or_partial", "rate"),
     ("mean correctness (0-2)", "mean_correctness", "mean"),
     ("citation_support (judged items)", "citation_support", "rate"),
+    ("first-retrieval hit@5 (like-for-like retrieval)", "first_retrieval_hit@5", "rate"),
     (f"context_hit@5 ({CONTEXT_LABEL})", "context_hit@5", "rate"),
     (f"mean context_evidence_recall@5 ({CONTEXT_LABEL})", "context_evidence_recall@5", "mean"),
     ("mean must_mention coverage (soft signal, D15)", "must_mention_coverage", "mean"),

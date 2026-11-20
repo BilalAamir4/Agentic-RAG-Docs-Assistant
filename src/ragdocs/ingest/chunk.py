@@ -5,6 +5,7 @@ import math
 import re
 from dataclasses import dataclass
 
+from ragdocs.docs_urls import chunk_url as build_chunk_url
 from ragdocs.ingest.parse import ParsedDocument
 from ragdocs.schemas import Chunk
 
@@ -232,7 +233,7 @@ def chunk_document(doc: ParsedDocument, source_commit: str) -> list[Chunk]:
             else:
                 embed_text = f"{doc.title}\n\n{piece_text}"
 
-            chunk_url = f"{doc.public_url}#{sec.anchor}" if sec.anchor else doc.public_url
+            chunk_url = build_chunk_url(doc.public_url, sec.anchor)
             tok_count = count_tokens(piece_text)
             has_code = "```" in piece_text
 

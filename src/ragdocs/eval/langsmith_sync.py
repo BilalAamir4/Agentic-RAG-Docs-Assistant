@@ -20,6 +20,7 @@ from typing import Any
 
 from ragdocs.config import Settings
 from ragdocs.eval.judge import load_records
+from ragdocs.eval.report import first_retrieval_hit_at_5
 from ragdocs.eval.scoring import effective_verdicts
 from ragdocs.io_utils import read_json, read_jsonl, write_json
 from ragdocs.schemas import EvalItem, EvalRecord, JudgeVerdict
@@ -95,6 +96,7 @@ def item_feedback(
     """Every stored score of one item as {feedback key: score}; missing scores are omitted.
 
     correctness follows the report rule: an abstained answerable item counts as 0.
+    first_retrieval_hit_at_5 (answerable items) is computed from the stored trace (D22).
     """
     s = record.scores
     answerable = record.category != "unanswerable"
@@ -107,6 +109,7 @@ def item_feedback(
         "abstention_correct": s.abstention_correct,
         "hallucinated": s.hallucinated,
         "context_hit_at_5": s.context_hit_at_5,
+        "first_retrieval_hit_at_5": first_retrieval_hit_at_5(record) if answerable else None,
         "context_evidence_recall_at_5": s.context_evidence_recall_at_5,
         "must_mention_coverage": s.must_mention_coverage,
         "llm_calls": s.llm_calls,
