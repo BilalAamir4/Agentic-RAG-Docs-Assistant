@@ -1,9 +1,9 @@
 M11: Self-RAG
-Status: Partial (S1 of 3 done; S2 graph and S3 evaluation not started)
+Status: Partial (S1 and S2 of 3 done; S3 evaluation not started)
 Date: 2026-11-21
 
 Goal
-M11 adds a "self_rag" mode to the M10 LangGraph pipeline: decide_retrieval before the corrective path, and verify_answer, regenerate and abstain after generate. It is split into three sessions: S1 groundwork (this file so far), S2 graph, S3 evaluation. S1 writes no self_rag state, prompt, node or wiring; build_graph("self_rag") still raises NotImplementedError("M11"). No Groq, Gemini or Tavily call was made in S1.
+M11 adds a "self_rag" mode to the M10 LangGraph pipeline: decide_retrieval before the corrective path, and verify_answer, regenerate and abstain after generate. It is split into three sessions: S1 groundwork, S2 graph (section "Session 2" below), S3 evaluation. S1 wrote no self_rag state, prompt, node or wiring and made no Groq, Gemini or Tavily call. S2 built the graph and ran the decide probe and four smoke asks; it ran no eval, ragas or experiment.
 
 Module prompt: "M11 (1/3): groundwork for self-RAG", given by the human on 2026-11-21.
 
@@ -102,6 +102,12 @@ Written 2026-11-21 from the committed corrective run results/runs/corrective-202
     - q034 baseline: "The assistant correctly explained how to use graph.get_state and graph.update_state with proper thread configs, matching the reference answer and supported by the cited excerpts."
     - q034 corrective: "The assistant correctly describes reading state with get_state. However, it invents an incorrect API for updating state by suggesting an '@update_state' decorator on a node function, rather than using graph.update_state(config, values). Additionally, the claim about the edit node lacks citation support since excerpt 4 discusses update_state differently."
   - Expectation: these are the items where verify_answer and regenerate could change the outcome (an unsupported claim the verifier can flag against the given contexts). q024's first retrieval had no gold evidence (item 1), so a regenerated q024 answer still has only the same graded excerpt to work from. q034's first retrieval held gold evidence (first_retrieval_hit@5 1).
+
+5. q028 is routed out of scope (added in S2, 2026-11-21, from the decide probe, before the self_rag eval; human decision to keep DECIDE_SYSTEM_PROMPT unchanged)
+  - q028 (single, answerable; "In Pregel, which channel is used by default, and what happens to earlier values?"; gold pregel.mdx#topic) is routed to out_of_scope by decide_retrieval, reason "Question about Pregel, not LangGraph." (cache/decide_probe.jsonl).
+  - Expected in S3: a false abstention (the out-of-scope text, abstained, no contexts).
+  - It also counts as a first_retrieval_hit@5 miss, because it has no retrieval event (M10 rule: an answerable item with no retrieval event is a miss). S3 must name q028 beside the first-retrieval hit@5 row, so the miss is not read as a retrieval regression.
+  - The probe is one sample per question; S3's call can differ from it.
 
 4. Cost forecast (Groq; from per_question.jsonl usage of the corrective run and cache/budget.json events for its run window)
 - Corrective, grader model openai/gpt-oss-20b (grade and rewrite calls): 138,872 tokens over 66 calls for 50 items. Per item: mean 2,777 tokens and 1.32 calls; max 5,672 tokens (q043) and 3 calls (the 8 rewrite items).
@@ -224,8 +230,10 @@ Known issues and limitations
 - The cost forecast uses the mean grading call as a stand-in for decide and verify calls.
 
 Open questions for the human
-- Open: how a caught self_rag fallback enters structured_output_failures. D26 says every caught failure counts there, but the count is built from failed attempts (items that ended in an error event), and a caught fallback does not end the item. One option: the report adds len(diagnostics["fallbacks"]) to the item's structured_output_failures, which leaves baseline and corrective unchanged because they have no fallbacks. The row label "failed attempts before success" would then need a wording change. Not built in S1; for the human or S2 to decide and record in DECISIONS.md.
-- Resolved on 2026-11-21:
+- Resolved in S2 (2026-11-21, human decision, D26 amendment): how a caught self_rag fallback enters structured_output_failures. It does not: a caught fallback is recorded in diagnostics["fallbacks"] and counted only in the structured-call fallbacks row. structured_output_failures keeps its meaning (failed attempts that ended an item in an error event), so the three pipelines stay comparable on that row. The total of failed structured calls for self_rag is the sum of the two rows. The report's counting is unchanged.
+- Resolved in S2 (2026-11-21): q028 routed out of scope by the decide probe. Human: keep the prompt; record the expectation (Pre-registered expectations, item 5) and a follow-up.
+- Resolved in S2 (2026-11-21): two placeholder assertions in tests/test_corrective_pipeline.py (see Session 2, Deviations).
+- Resolved on 2026-11-21 (S1):
   - Recount method: forward error_kind, message classification, override file (q049).
   - Fallback storage: PipelineResult.diagnostics, left out of dumps when empty.
   - Existing test conflict: change the fake's default message.
@@ -235,9 +243,11 @@ Proposed follow-ups (out of scope)
 - Record the failed attempt's own LangSmith run id in FailedAttempt, so evidence for an override can point at the failing trace.
 - Fix the failed_attempts stage for nodes that emit node_start only in their return value (M10 follow-up, still open).
 - Groq 400 json_validate_failed on corrective's grader or rewriter still ends the graph with an error event (M10 follow-up for M12). D26 covers only self_rag's new calls.
+- (S2) decide_retrieval false negative on a question that names a LangGraph component without the word "LangGraph" (q028: Pregel). Any prompt change must be validated on questions outside the eval set, never by re-running the probe on it. Not done in M11.
+- (S2) The answer text printed by ask.py for q009 shows a code block with its indentation lost. This is the generator's output through the shared answer path (not a self_rag change); worth a check in M12/M13 when answers are rendered.
 
-Prerequisites for the next session (S2)
-- See "Handoff to S2".
+Prerequisites for the next session
+- S2: see "Handoff to S2" (done). S3: see "Handoff to S3" at the end of this file.
 
 Handoff to S2
 - Names to use:
@@ -251,5 +261,161 @@ Handoff to S2
 - D numbers: D26 (self-RAG structured-call failure policy), D27 (8-call bound). The D23 update covers failed-attempt kinds and the override file.
 - Structured-output method (D23): `with_structured_output(schema, method="json_schema", strict=True)` through Settings.structured_output_method ("json_schema") and Settings.structured_output_strict (True); bind with ragdocs.pipelines.agentic.graph.bind_structured as the corrective grader does.
 - Outcomes (D25): decide_retrieval failure gives "info"; verify_answer failure gives "info" and routes to END; regenerate failure abstains with abstain_reason "regenerate_failed" and outcome "stop".
-- Open questions: one, how caught fallbacks enter structured_output_failures (see "Open questions for the human").
+- Open questions: one, how caught fallbacks enter structured_output_failures (see "Open questions for the human"). Resolved in S2 by the D26 amendment.
 - Pre-registered expectations for S3 are above. Do not edit them after the self_rag eval runs.
+
+Session 2: self-RAG graph and pipeline (2026-11-21)
+Module prompt: "M11 (2/3): self-RAG graph and pipeline", given by the human on 2026-11-21.
+
+S2 Step 0: D26 amendment
+- Appended to D26 in docs/DECISIONS.md, word for word as given ("Amended 21 Nov 2026: ..."). The report's counting is unchanged. The S1 open question is marked resolved above.
+
+S2 Step 1: verified facts (langgraph 1.2.14, langchain-core 1.6.10, from importlib.metadata in .venv; paths under .venv/Lib/site-packages)
+- Each fact was checked in the source and with a throwaway script in the session scratchpad (not committed).
+- a) Conditional edges with END.
+  - Source: langgraph/graph/state.py add_conditional_edges (line 982) builds BranchSpec.from_path (langgraph/graph/_branch.py line 89). A dict path_map is copied and a list becomes an identity map. With no path_map, the ends come only from a Literal return hint on the routing function, else None. _finish (line 192) maps the returned value through ends. END is the string "__end__" (langgraph/constants.py line 28). validate (state.py line 1129) accepts END as a branch target.
+  - Probe, routing function returning END or "b":
+    - Without a path map, the graph routes correctly, but the Mermaid export drew only `a --> __end__;` and no edge to b.
+    - With the explicit path map {"b": "b", END: END}, it drew `a -.-> __end__;` and `a -.-> b;` (dotted = conditional), plus `b --> __end__;`.
+  - So every self_rag conditional edge uses an explicit identity path map, END included.
+- b) Exceptions handled inside a node.
+  - Source: langgraph/pregel/_retry.py run_with_retry (line 575). It returns task.proc.invoke(...) and only reaches the retry policy through its except branches, so a node that catches its own exception returns normally. The retry policy is task.retry_policy or the compile default. The project's add_node and compile calls pass none.
+  - Probe: a node that raised and caught an exception, then returned an update, led to the next node running. stream_mode="updates" gave both updates, and builder.nodes["n1"].retry_policy was None.
+- c) State key without a reducer.
+  - Source: such a key is a LastValue channel (langgraph/channels/last_value.py line 20). update (line 56) stores values[-1], so the whole value is replaced.
+  - Probe: initial diag {"k": 0}; node 1 returned {"fallbacks": [...]}, node 2 returned {"other": 1}; the final diag was {"other": 1}. The channel type was LastValue.
+  - So every self_rag node that writes diagnostics returns a merged copy (self_rag_nodes.with_fallback; {**state["diagnostics"], ...}).
+
+S2 What was built
+- src/ragdocs/pipelines/agentic/state.py:
+  - RetrievalDecision(needs_docs, reason) and AnswerVerification(grounded, unsupported_claims, answers_question). Length limits are in the Field descriptions only, with no validators.
+  - AgentState gains needs_docs, regenerations and verification as NotRequired keys. initial_state(question, mode="corrective") sets them only for "self_rag", so the corrective graph input is unchanged.
+  - AgenticDeps gains decider_llm and verifier_llm, both defaulting to None.
+- src/ragdocs/pipelines/agentic/prompts.py: DECIDE_SYSTEM_PROMPT, DECIDE_USER_TEMPLATE, VERIFY_SYSTEM_PROMPT, VERIFY_USER_TEMPLATE, REGENERATE_FEEDBACK_TEMPLATE and OUT_OF_SCOPE_TEXT, with the exact prompt text. The corrective prompts are unchanged.
+- src/ragdocs/pipelines/agentic/self_rag_nodes.py (new): the nodes decide_retrieval, out_of_scope, verify_answer, regenerate and abstain, plus the helpers with_fallback, verify_route, feedback_claims and feedback_message. The D26 catch uses is_structured_output_error and re-raises everything else. Fallback events carry data["fallback"] and data["error_kind"].
+- src/ragdocs/pipelines/agentic/graph.py:
+  - build_graph builds "self_rag" with the wiring below and "corrective" as in M10. The corrective nodes are added in the same order through the same partials, so corrective.mmd is byte-identical.
+  - route_next_step routes self_rag; the path maps are DECIDE_BRANCHES, VERIFY_BRANCHES (END, "regenerate", "abstain") and REGENERATE_BRANCHES.
+  - build_default_deps binds RetrievalDecision and AnswerVerification on the grader model with bind_structured (D23).
+- src/ragdocs/pipelines/agentic/pipeline.py: passes the mode to initial_state. Only when mode == "self_rag" does it copy the graph diagnostics into PipelineResult.diagnostics. The module docstring names the self_rag parent run.
+- src/ragdocs/pipelines/registry.py: list_pipelines() is ["baseline", "corrective", "self_rag"], and "self_rag" is AgenticPipeline("self_rag").
+- scripts/export_graphs.py: exports corrective and self_rag. docs/graphs/self_rag.mmd is new.
+- scripts/decide_probe.py (new, dev-only, not imported by ragdocs): runs decide_retrieval on each eval question. Before each call it waits on the gpt-oss-20b RollingBudget built from cache/budget.json. The budget recorder writes every call to the budget file. Tracing is off. Output goes to cache/decide_probe.jsonl.
+- docs/DECISIONS.md: the D26 amendment.
+- Tests:
+  - tests/test_corrective_mermaid.py (new, written and passing before graph.py changed): the corrective graph from build_graph with fake deps equals corrective.mmd byte for byte.
+  - tests/self_rag_fakes.py (new): RaisingChatModel, the decide and verify JSON helpers, fake groq 429, connection and json_validate_failed errors, and SelfRagHarness.
+  - tests/test_self_rag_graph.py (new, 28 tests): items (a) to (q) of the prompt, plus the verify message contents, the empty-claims feedback line, the abstain-in-generate path, the recursion threshold, the self_rag Mermaid edges, registration with parent run name "self_rag", and the runtime safety of self_rag_nodes.
+  - tests/test_corrective_pipeline.py: the two approved placeholder assertions (Deviations).
+
+Self_rag wiring as built (docs/graphs/self_rag.mmd)
+- `__start__ --> decide_retrieval`; `decide_retrieval -.-> retrieve` and `-.-> out_of_scope`; `out_of_scope --> __end__`.
+- retrieve, grade_documents, rewrite_query and web_search are wired as in corrective.
+- `generate --> verify_answer`; `verify_answer -.-> __end__`, `-.-> regenerate` and `-.-> abstain`; `regenerate -.-> verify_answer` and `-.-> abstain`; `abstain --> __end__`.
+- No edge leads from verify_answer or regenerate to retrieve, rewrite_query, grade_documents or decide_retrieval (asserted in test_self_rag_mermaid_has_no_edge_back_to_retrieval).
+
+Decision outcomes (D25 additions, self_rag only; asserted on every tested path)
+- decide_retrieval: "ok" when needs_docs is true; "stop" when it is false; "info" on decide_failed.
+- out_of_scope: "stop".
+- verify_answer:
+  - "ok" when grounded and answering.
+  - "retry" when not grounded and regenerations < max_regenerations.
+  - "stop" when it abstains (not_grounded, does_not_answer).
+  - "info" when skipped because the answer abstained, and on verify_failed.
+- regenerate: "retry" on success; "stop" on regenerate_failed.
+- abstain: "stop".
+
+S2 How to run
+- `.venv\Scripts\python scripts\ask.py --pipeline self_rag "question"`.
+- `.venv\Scripts\python scripts\export_graphs.py` rewrites both .mmd files.
+- `.venv\Scripts\python scripts\decide_probe.py [--limit N]` (live; run the budget check first).
+
+S2 Verification
+- Before any S2 code change: `py tasks.py test` gave "320 passed, 1 deselected in 12.25s", including the new corrective Mermaid test.
+- Final (2026-11-21, before commit):
+  - `py tasks.py lint`: "All checks passed!", "154 files already formatted".
+  - `py tasks.py test`: "348 passed, 1 deselected in 14.39s".
+- `git diff --stat 8857168 -- tests/ docs/graphs/corrective.mmd results/`: "tests/test_corrective_pipeline.py | 10 ++++++----, 1 file changed, 6 insertions(+), 4 deletions(-)". That diff is only the two approved assertions. corrective.mmd and results/ are unchanged. The new test files are untracked additions.
+- Call bound (D27): the worst-case path decide, retrieve, grade, rewrite, retrieve, grade, web_search, generate, verify, regenerate, verify, abstain uses exactly 8 LLM calls: decide 1, grade 2, rewrite 1, generate 2, verify 2. That is 12 node steps.
+  - Measured threshold: recursion_limit 13 completes and 12 raises GraphRecursionError. The limit stays 20, which leaves 7 spare steps.
+- Budget check before the live calls: `py tasks.py budget --need openai/gpt-oss-20b=62000:70 --need openai/gpt-oss-120b=20000:8 --need gemini-embedding-001=2000:8` reported fits for all three (gpt-oss-20b had 77,504 tokens free at 0.9). Before the smoke asks: `--need openai/gpt-oss-20b=40000:20 --need openai/gpt-oss-120b=20000:8 --need gemini-embedding-001=2000:8` reported fits (118,414 free on gpt-oss-20b after the bucket refilled).
+
+S2 Decide probe (scripts/decide_probe.py, tracing off, 2026-11-21)
+- Totals: 50 calls, 20,520 tokens on openai/gpt-oss-20b (mean 410, max 490 on q024), no fallbacks.
+- Routing: 49 of 50 routed to retrieval, including all 8 unanswerable items (q043 to q050).
+- needs_docs false: one item, q028 (single, answerable), reason "Question about Pregel, not LangGraph." This hit the STOP rule. The human kept the prompt (option 1): Pre-registered expectations item 5, and a Proposed follow-up. The prompt was not changed.
+- gpt-oss-20b budget after the probe and the smoke asks: 75,624/200,000 in the token bucket, 104,376 tokens and 892 requests free at 0.9 (`py tasks.py budget`, 2026-11-21 about 07:33 UTC).
+
+S2 Smoke asks (tracing on; `.venv\Scripts\python scripts\ask.py --pipeline self_rag`; started at least 60 s apart, at 07:27:48, 07:29:17, 07:30:33 and 07:32:04 UTC)
+- Tokens are per call from cache/budget.json.
+- q001 ("My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?"): llm_calls 4. gpt-oss-20b 4,346 tokens (decide 393, grade 1,924, verify 2,029); gpt-oss-120b 1,789. Answered with 2 citations; not abstained; no web.
+  - decide_retrieval: "retrieval needed: LangGraph recursion limit question" (ok)
+  - retrieve: retrieval event, 5 chunks, hybrid
+  - grade_documents: "4 of 5 chunks relevant" (ok); "Route to generate: 4 relevant chunk(s) >= 1" (ok)
+  - generate: "Generating from 4 graded excerpts and 0 web results" (info)
+  - verify_answer: "answer verified" (ok)
+- q009 ("Which channel mechanism avoids storing redundant duplicate states by persisting only incremental changes?"): llm_calls 4. gpt-oss-20b 4,445 tokens (decide 421, grade 1,967, verify 2,057); gpt-oss-120b 2,239. Answered (DeltaChannel) with 2 citations; not abstained.
+  - decide_retrieval: "retrieval needed: Asks about LangGraph channel mechanism" (ok)
+  - retrieve: 5 chunks
+  - grade_documents: "4 of 5 chunks relevant" (ok); "Route to generate: 4 relevant chunk(s) >= 1" (ok)
+  - generate: "Generating from 4 graded excerpts and 0 web results" (info)
+  - verify_answer: "answer verified" (ok)
+- q043 ("Which RetryPolicy argument caps the total wall-clock time ..."; unanswerable): llm_calls 5. gpt-oss-20b 5,498 tokens (decide 453, grade 2,061, rewrite 587, grade 2,397); gpt-oss-120b 957. Abstained (correct for an unanswerable item); used_web True; latency 11,539 ms.
+  - decide_retrieval: "retrieval needed: Query about RetryPolicy argument in LangGraph documentation" (ok)
+  - retrieve: 5 chunks
+  - grade_documents: "0 of 5 chunks relevant" (retry); "Route to rewrite_query: too few relevant chunks; rewrite 1 of 1" (retry)
+  - rewrite_query: "query rewritten" (retry)
+  - retrieve: 5 chunks
+  - grade_documents: "0 of 5 chunks relevant" (retry); "Route to web_search: too few relevant chunks after 1 rewrite(s)" (retry)
+  - web_search: "fell back to web search" (retry), 1 web result
+  - generate: "Generating from 0 graded excerpts and 1 web results" (info); the generator abstained
+  - verify_answer: "verification skipped: abstained" (info)
+- "hi, what can you do?": llm_calls 1. gpt-oss-20b 396 tokens (decide). Answer: OUT_OF_SCOPE_TEXT, abstained, no retrieval.
+  - decide_retrieval: "no retrieval needed: Greeting, no docs needed" (stop)
+  - out_of_scope: "out of scope; answered without retrieval" (stop)
+- Smoke totals: gpt-oss-20b 14,685 tokens over 12 calls; gpt-oss-120b 4,985 over 3 calls; gemini-embedding-001 4 retrieval calls.
+- No smoke ask reached regenerate or abstain. Their node runs are covered by tests only (c, d, g, j, k).
+- After q043, the verify_answer node_end message was changed from "Answer verified" to "Verification finished". The old text was wrong for the skipped and failed cases. q001, q009 and q043 above show the old text; the greeting ask does not reach verify_answer. No test asserts this message.
+
+S2 LangSmith trace check
+- The Claude in Chrome browser extension was not connected ("Browser extension is not connected"), so the trace could not be opened in a browser. The nesting was checked instead through the LangSmith API (langsmith Client.list_runs(trace_id=...), read-only, key read through get_settings and configure_tracing, from a scratchpad script).
+- q001 trace 01a1fd01-13ef-7551-9ee9-896fd7ce3a0c, 23 runs: self_rag (chain) > graph (chain) > decide_retrieval, retrieve (> hybrid_retrieve, retriever), grade_documents, generate, verify_answer. Each LLM node holds RunnableSequence > ChatGroq + PydanticOutputParser; route_next_step and route_after_grading appear as branch runs. No run nests under one with the same name.
+- q009 trace 01a1fd02-7666-73e0-97cb-09f06d74b0a1: the same shape, 23 runs, no same-name nesting.
+- q043 trace 01a1fd03-a10b-7662-90fa-7ce0ab75a0f1, 33 runs: self_rag > graph > decide_retrieval, retrieve (> hybrid_retrieve), grade_documents, rewrite_query, retrieve (> hybrid_retrieve), grade_documents, web_search (> tavily_search, tool), generate, verify_answer. No same-name nesting.
+- Screenshot: docs/screenshots/langsmith-self-rag-trace.png, taken from the q001 trace by the human (see Deviations).
+
+S2 Decisions made
+- The self_rag nodes live in a new module (self_rag_nodes.py), so nodes.py (the corrective nodes) is byte-identical to M10. They reuse nodes._event and nodes._decision.
+- The new state keys are NotRequired and set only for self_rag, so the corrective graph's input (and its LangSmith "graph" run inputs) are unchanged.
+- regenerate increments regenerations on both success and regenerate_failed (an attempt was made). Fallback names are appended in the order they happen.
+- PipelineResult.diagnostics for self_rag is the full graph-state diagnostics (it includes corrective counters such as missing_grades, plus fallbacks and abstain_reason), as the S1 handoff said: "copies graph-state diagnostics into it".
+- The decide and verify success messages ("retrieval needed: <reason>", "no retrieval needed: <reason>", "answer verified", "answer not grounded; regenerating", "abstaining: <reason>") and the regenerate message ("regenerating without N unsupported claim(s)") are mine. The prompt fixed only the fallback and skip messages, which are used verbatim.
+
+S2 Deviations from the prompt
+- Approved M11 placeholder assertions (human decision, 2026-11-21), in tests/test_corrective_pipeline.py:
+  - test_self_rag_not_implemented was renamed to test_self_rag_builds. It now asserts that build_graph("self_rag", fake deps) compiles and contains decide_retrieval, out_of_scope, verify_answer, regenerate and abstain.
+  - test_corrective_is_registered expects ["baseline", "corrective", "self_rag"]. Nothing else in that test changed.
+- Step 3.3: the browser tool could not connect, so the nesting was checked through the LangSmith API, and the human saved the screenshot.
+- Step 2.1: an export test already existed (test_committed_mermaid_matches_fresh_export, through export_mermaid). The new test builds from fake deps and compares bytes, as the prompt asked; the old one is kept unchanged.
+
+S2 Known issues and limitations
+- q028 goes out of scope (Pre-registered expectations item 5).
+- regenerate and abstain have not been seen in a live trace.
+- The verify_answer token figures come from 2 live calls (2,029 and 2,057 tokens, both with 4 contexts); S3 will show the spread.
+- The decide probe is one sample per question.
+
+Handoff to S3
+- Run commands (each after `py tasks.py budget --need ...` for openai/gpt-oss-20b, openai/gpt-oss-120b and gemini-embedding-001; stop if any need does not fit):
+  - `py tasks.py eval --pipeline self_rag`
+  - then the judge, `py tasks.py ragas --run-dir <run>` (after `--cache-check`), the experiment and `py tasks.py compare results/runs/baseline-20261116-1050 <run>` (and against corrective-20261120-1852), as in M10 S3.
+- Probe token use today (2026-11-21): 20,520 tokens and 50 requests on gpt-oss-20b. The smoke asks added 14,685 tokens and 12 requests on gpt-oss-20b, and 4,985 tokens and 3 requests on gpt-oss-120b.
+- Expected quota days:
+  - S1 forecast (Pre-registered expectations item 4): 1.9 to 2.5 days on gpt-oss-20b from a drained bucket; plan for 2 to 3 calendar days.
+  - S2 measurements lower it. A decide call is about 410 tokens (probe mean), not the 2,301-token stand-in. A verify call was about 2,040 tokens (2 calls).
+  - Revised per item: 2,777 + 410 + 1 or 2 x 2,040 = 5,227 to 7,267 tokens. Per 50 items: about 261,000 to 363,000. That is 1 + (261,000 - 180,000) / 200,000 = 1.4 to 1 + (363,000 - 180,000) / 200,000 = 1.9 days.
+  - This is an observation from few calls, not a replacement for item 4.
+- Watch in S3:
+  - 429 retries on worst-case items. The rewrite items (q025, q043 to q050) need about 5,500 grader tokens before verify; with verify they can pass the 7,200 TPM cap at 0.9 within one minute. The throttle and the runner's 429 handling (S1 Step 1d) cover this. The M10 STOP rules still apply: a single call over 7,200 tokens, or two rate-limit failures in a row on one item.
+  - Fallback counts: the structured-call fallbacks row (with per-type counts) and structured_output_failures are separate (D26 amendment). Report both, and their sum as the total of failed structured calls.
+  - q028: name it beside the first-retrieval hit@5 row and in the false-abstention count (item 5).
+  - Items that reach regenerate: check one trace for the regenerate node run, since no smoke ask covered it.

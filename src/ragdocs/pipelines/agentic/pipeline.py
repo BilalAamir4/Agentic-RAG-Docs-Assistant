@@ -1,6 +1,6 @@
 """AgenticPipeline: streams a compiled agentic graph as TraceEvents (M10).
 
-LangSmith trace shape (D22): parent run named after the mode ("corrective"), the
+LangSmith trace shape (D22): parent run named after the mode ("corrective" or "self_rag"), the
 LangGraph run "graph" inside it, node runs inside that, and "hybrid_retrieve" /
 "tavily_search" inside the retrieve and web_search nodes.
 
@@ -81,7 +81,9 @@ class AgenticPipeline:
         trace: list[TraceEvent] = []
         latest: dict[str, Any] = {"answer": None, "contexts": [], "used_web": False}
         try:
-            for update in self.graph.stream(initial_state(question), config, stream_mode="updates"):
+            for update in self.graph.stream(
+                initial_state(question, self.mode), config, stream_mode="updates"
+            ):
                 for node_update in update.values():
                     if not node_update:
                         continue
@@ -102,6 +104,10 @@ class AgenticPipeline:
                 latency_ms=t_ms(),
                 used_web=latest["used_web"],
             )
+            if self.mode == "self_rag":
+                # Only self_rag copies graph diagnostics into the result (D26), so corrective
+                # results serialise byte-identically to M10.
+                result.diagnostics = dict(latest.get("diagnostics", {}))
             # Same construction as BaselinePipeline: the answer event is the last entry of
             # result.trace, and its data is re-dumped so the yielded data holds that trace.
             e_answer = TraceEvent(

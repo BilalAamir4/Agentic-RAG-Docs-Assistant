@@ -259,6 +259,7 @@
 - **Storage:** PipelineResult.diagnostics (dict, default empty, left out of dumps when empty). Only self_rag copies graph-state diagnostics into it, so baseline and corrective results serialise byte-identically to M10.
 - **Method:** the new calls use the D23 method (with_structured_output(schema, method="json_schema", strict=True) through Settings.structured_output_method and structured_output_strict).
 - **Date:** 2026-11-21
+- **Amended 21 Nov 2026:** a fallback caught inside a self_rag node is recorded in diagnostics["fallbacks"] and counted in the structured-call fallbacks row only. It is not added to structured_output_failures, which keeps its meaning (failed attempts that ended an item in an error event) so the three pipelines stay comparable on that row. The total of failed structured calls for self_rag is the sum of the two rows.
 
 ### D27 Self-RAG LLM Call Bound
 - **Decision:** The maximum number of LLM calls per self_rag question.

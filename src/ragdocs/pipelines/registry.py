@@ -7,7 +7,7 @@ _PIPELINES: dict[str, Pipeline] = {}
 
 def list_pipelines() -> list[str]:
     """Return sorted list of supported pipeline names."""
-    return ["baseline", "corrective"]
+    return ["baseline", "corrective", "self_rag"]
 
 
 def get_pipeline(name: str) -> Pipeline:
@@ -53,6 +53,10 @@ def get_pipeline(name: str) -> Pipeline:
             from ragdocs.pipelines.agentic.pipeline import AgenticPipeline
 
             _PIPELINES[name] = AgenticPipeline("corrective")
+        elif name == "self_rag":
+            from ragdocs.pipelines.agentic.pipeline import AgenticPipeline
+
+            _PIPELINES[name] = AgenticPipeline("self_rag")
 
     return _PIPELINES[name]
 

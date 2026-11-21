@@ -1,0 +1,38 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	retrieve(retrieve)
+	grade_documents(grade_documents)
+	rewrite_query(rewrite_query)
+	web_search(web_search)
+	generate(generate)
+	decide_retrieval(decide_retrieval)
+	out_of_scope(out_of_scope)
+	verify_answer(verify_answer)
+	regenerate(regenerate)
+	abstain(abstain)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> decide_retrieval;
+	decide_retrieval -.-> out_of_scope;
+	decide_retrieval -.-> retrieve;
+	generate --> verify_answer;
+	grade_documents -.-> generate;
+	grade_documents -.-> rewrite_query;
+	grade_documents -.-> web_search;
+	regenerate -.-> abstain;
+	regenerate -.-> verify_answer;
+	retrieve --> grade_documents;
+	rewrite_query --> retrieve;
+	verify_answer -.-> __end__;
+	verify_answer -.-> abstain;
+	verify_answer -.-> regenerate;
+	web_search --> generate;
+	abstain --> __end__;
+	out_of_scope --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

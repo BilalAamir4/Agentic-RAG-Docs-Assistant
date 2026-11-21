@@ -4,7 +4,7 @@ Usage:
     .venv\\Scripts\\python scripts\\export_graphs.py
 
 Inputs: the graph definitions in ragdocs.pipelines.agentic.graph.
-Outputs: docs/graphs/corrective.mmd (M11 adds self_rag).
+Outputs: docs/graphs/corrective.mmd and docs/graphs/self_rag.mmd (M11).
 """
 
 from ragdocs.config import REPO_ROOT
@@ -12,7 +12,7 @@ from ragdocs.io_utils import write_text
 from ragdocs.pipelines.agentic.graph import export_mermaid
 
 GRAPHS_DIR = REPO_ROOT / "docs" / "graphs"
-EXPORTED_MODES = ("corrective",)
+EXPORTED_MODES = ("corrective", "self_rag")
 
 
 def main() -> None:

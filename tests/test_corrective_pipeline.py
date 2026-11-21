@@ -122,9 +122,11 @@ def test_recursion_limit_20_is_passed_to_the_graph() -> None:
     assert seen["metadata"]["pipeline"] == "corrective"
 
 
-def test_self_rag_not_implemented() -> None:
-    with pytest.raises(NotImplementedError, match="M11"):
-        build_graph("self_rag", _worst_case().deps)
+def test_self_rag_builds() -> None:
+    graph = build_graph("self_rag", _worst_case().deps)
+    names = set(graph.get_graph().nodes)
+    for node in ("decide_retrieval", "out_of_scope", "verify_answer", "regenerate", "abstain"):
+        assert node in names
 
 
 def test_committed_mermaid_matches_fresh_export() -> None:
@@ -155,7 +157,7 @@ def test_first_retrieval_hit_uses_corrective_trace_chunk_ids() -> None:
 
 
 def test_corrective_is_registered(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert registry.list_pipelines() == ["baseline", "corrective"]
+    assert registry.list_pipelines() == ["baseline", "corrective", "self_rag"]
     deps = _worst_case().deps
     monkeypatch.setattr(pipeline_module, "build_default_deps", lambda: deps)
     registry.clear_pipeline_cache()
