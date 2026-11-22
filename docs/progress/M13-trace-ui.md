@@ -1,5 +1,5 @@
 M13: Trace UI
-Status: Partial (manual checks pending)
+Status: Done
 Date: 2026-11-22
 
 Goal
@@ -157,8 +157,8 @@ Step 4 browser checks (page at http://127.0.0.1:8000/, built files, 1920 px wide
 1. Streaming, baseline "Version change": PASS. Rows arrived at performance.now() 11060, 11716, 11716, 13487, 13495 ms: 4 distinct times over 2.4 s. A self_rag run arrived in node-sized bursts at 68139, 68748, 69441-69446, 70706-70711, 71443-71448 ms (3.3 s).
 2. Screenshots: ui-baseline.png, ui-corrective.png, ui-self-rag.png saved (retrieval row expanded on self_rag; decision rows are not collapsible). DEVIATION: 1920 px wide and dark scheme, not 1280 px and light. The layout container is max 1200 px wide and centred, so the content is the same width as at 1280.
 3. Abstention, "Not in the docs" on self_rag: PASS. Neutral Alert "The docs do not answer this question." shows with the model text; decisions RETRY x6 then INFO x2, coherent with the web-search fallback.
-4. Mobile (390 px): NOT DONE. The viewport cannot be set. ui-mobile.png does not exist.
-5. Dark mode: ui-dark.png saved (this Chrome is in dark scheme; the abstain run with amber, red-free badges, borders and the code block in ui-baseline.png are readable). Light scheme was never seen in a browser. Manual check for the human: in Chrome DevTools > Rendering > "Emulate CSS media feature prefers-color-scheme: light", reload and ask once; check badges, borders and code blocks.
+4. Mobile (390 px): PASS, done by the human in DevTools (390x844): `document.documentElement.scrollWidth === document.documentElement.clientWidth` printed true; docs/screenshots/ui-mobile.png saved (the browser tool could not set the viewport).
+5. Dark mode: ui-dark.png saved (this Chrome is in dark scheme; the abstain run with amber, red-free badges, borders and the code block in ui-baseline.png are readable). Light scheme: PASS, checked by the human ("light ok"). The check was: in Chrome DevTools > Rendering > "Emulate CSS media feature prefers-color-scheme: light", reload and ask once; check badges, borders and code blocks.
 6. Decision messages: see the table below.
 7. Keyboard only: PASS. Tab reached "Source on GitHub", the Textarea, then the pipeline radio group; the question was typed; Space selected Baseline (ArrowUp moved focus; the tool's synthetic arrow key did not select by itself); Shift+Tab back; Ctrl+Enter submitted (the key name "ctrl+Return" in the tool did nothing, "ctrl+Enter" works); focus stayed in the Textarea; the run completed (5 rows, "Total 2.0 s · 1 LLM calls · no web search"); the collapsible trigger opened with Enter and closed with Space. A focus ring (box-shadow or outline) was present on every focused element.
 8. 429 (RAGDOCS_LOCAL_FAKE_LIMIT=ip): PASS. Alert "Rate limit reached. Try again later." with "Try again in 5 s" counting 5, 4, 3, 2, 1 once per second; the Ask button unavailable throughout; at 0 the Alert disappeared and the button was available again.
@@ -236,3 +236,8 @@ B. Mobile, 390 px: open DevTools (F12), turn on the device toolbar (Ctrl+Shift+M
    document.documentElement.scrollWidth === document.documentElement.clientWidth
    It must print true. Then, from the DevTools three-dot menu, run "Capture screenshot" and save the file as docs/screenshots/ui-mobile.png.
 C. Reply with "light ok/not ok", "mobile true/false", and say whether ui-mobile.png is saved.
+
+Manual check results (human, 2026-11-22)
+- A. Light mode: ok (text, badges, borders and code blocks readable).
+- B. Mobile 390 px: scrollWidth === clientWidth printed true; ui-mobile.png saved.
+- All Step 4 checks now pass or are covered by the human's manual results. The 1280 px screenshots remain 1920 px dark captures (layout capped at 1200 px).
