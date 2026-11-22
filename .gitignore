@@ -17,3 +17,7 @@ desktop.ini
 
 # Third-party page snapshots (local only; re-fetch to run verify-sources)
 data/eval/source_snapshots/
+
+# Frontend (M13)
+web/node_modules/
+web/dist/

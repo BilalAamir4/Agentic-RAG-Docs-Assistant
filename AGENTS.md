@@ -2,12 +2,12 @@ Agent rules for Agentic-RAG-Docs-Assistant
 Read this file fully at the start of every session, then docs/progress/PROGRESS.md, then the newest file in docs/progress/, then docs/DECISIONS.md, then the module prompt you were given.
 
 Project in one paragraph
-A documentation assistant over the LangGraph Python docs. Three pipelines (baseline LangChain RAG, corrective RAG and self-RAG in LangGraph) share one index, one answer prompt and one 50-question eval set, so their results are directly comparable. Offline (this Windows machine): ingest, index build, evaluation. Online (Vercel Hobby, Linux): static page in public/ plus a FastAPI function in api/index.py that loads the committed index into memory. Python package name: ragdocs.
+A documentation assistant over the LangGraph Python docs. Three pipelines (baseline LangChain RAG, corrective RAG and self-RAG in LangGraph) share one index, one answer prompt and one 50-question eval set, so their results are directly comparable. Offline (this Windows machine): ingest, index build, evaluation. Online (Vercel Hobby, Linux): static page in public/ (React + TypeScript + Tailwind + shadcn/ui built from web/ with Vite, built files committed; see D30) plus a FastAPI function in api/index.py that loads the committed index into memory. Python package name: ragdocs.
 
 Environment
 Native Windows 11, PowerShell terminal. Not WSL. CI (GitHub Actions) and Vercel run Linux, so all code must work on both.
 Run every project command through the task runner: py tasks.py <command>. Run a script directly with .venv\Scripts\python <path>. Never activate the venv and never call a bare python or pip.
-Commands: setup, lint, format, test, test-live, tree, hash, ingest, index, eval --pipeline NAME, validate-eval [--require-verified], dev, bundle-check, smoke --url URL.
+Commands: setup, lint, format, test, test-live, tree, hash, web-install, web-build, web-test, web-lint, web-dev, ingest, index, eval --pipeline NAME, validate-eval [--require-verified], dev, bundle-check, smoke --url URL.
 No make, sha256sum, tree, du or grep. Use py tasks.py hash for checksums, py tasks.py tree for the tree, Select-String or a short Python snippet for searching, and curl.exe (not curl) for HTTP.
 Paths: pathlib everywhere; never hardcode separators; store repository-relative paths in data files with forward slashes (Path.as_posix()).
 Text files: always read and write with encoding="utf-8"; write with newline="\n"; use ragdocs.io_utils for JSONL and text. The Windows default encoding is not UTF-8 and silently corrupts data.

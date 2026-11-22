@@ -1,0 +1,364 @@
+{
+  "generated_on": "2026-11-22",
+  "n_questions": 50,
+  "eval_set_sha256": "316b1d683050e426ad5bf2324b9ca7211d30ea2566276320489e6acb538a470f",
+  "pipelines": [
+    {
+      "name": "baseline",
+      "label": "Baseline RAG",
+      "run_dir": "results/runs/baseline-20261116-1050",
+      "metrics": {
+        "correct": {
+          "label": "Correct answers",
+          "value": 0.9047619047619048,
+          "count": 38,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "correct_or_partial": {
+          "label": "Correct or partial",
+          "value": 0.9285714285714286,
+          "count": 39,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "citation_support": {
+          "label": "Citation support",
+          "value": 1.0,
+          "count": 39,
+          "n": 39,
+          "kind": "rate",
+          "unit": null
+        },
+        "abstention_correct": {
+          "label": "Unanswerable correctly declined",
+          "value": 1.0,
+          "count": 8,
+          "n": 8,
+          "kind": "rate",
+          "unit": null
+        },
+        "hallucinated": {
+          "label": "Hallucinated on unanswerable",
+          "value": 0.0,
+          "count": 0,
+          "n": 8,
+          "kind": "rate",
+          "unit": null
+        },
+        "first_retrieval_hit_at_5": {
+          "label": "First-retrieval hit@5 (like-for-like retrieval)",
+          "value": 0.8095238095238095,
+          "count": 34,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "context_hit_at_5": {
+          "label": "Context hit@5 (on contexts given to the generator)",
+          "value": 0.8095238095238095,
+          "count": 34,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "ragas_faithfulness": {
+          "label": "RAGAS faithfulness",
+          "value": 0.921891783430245,
+          "count": null,
+          "n": 39,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_response_relevancy": {
+          "label": "RAGAS response relevancy",
+          "value": 0.8128470928487644,
+          "count": null,
+          "n": 39,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_context_precision": {
+          "label": "RAGAS context precision (on contexts given to the generator)",
+          "value": 0.7200066137219844,
+          "count": null,
+          "n": 42,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_context_recall": {
+          "label": "RAGAS context recall (on contexts given to the generator)",
+          "value": 0.8452380952380952,
+          "count": null,
+          "n": 42,
+          "kind": "mean",
+          "unit": null
+        },
+        "mean_llm_calls": {
+          "label": "Mean LLM calls per question",
+          "value": 1.0,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "calls"
+        },
+        "mean_tokens": {
+          "label": "Mean tokens per question",
+          "value": 2333.56,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "tokens"
+        },
+        "p50_latency_ms": {
+          "label": "Median latency",
+          "value": 2207.5,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "name": "corrective",
+      "label": "Corrective RAG",
+      "run_dir": "results/runs/corrective-20261120-1852",
+      "metrics": {
+        "correct": {
+          "label": "Correct answers",
+          "value": 0.8809523809523809,
+          "count": 37,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "correct_or_partial": {
+          "label": "Correct or partial",
+          "value": 0.9047619047619048,
+          "count": 38,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "citation_support": {
+          "label": "Citation support",
+          "value": 0.9487179487179487,
+          "count": 37,
+          "n": 39,
+          "kind": "rate",
+          "unit": null
+        },
+        "abstention_correct": {
+          "label": "Unanswerable correctly declined",
+          "value": 1.0,
+          "count": 8,
+          "n": 8,
+          "kind": "rate",
+          "unit": null
+        },
+        "hallucinated": {
+          "label": "Hallucinated on unanswerable",
+          "value": 0.0,
+          "count": 0,
+          "n": 8,
+          "kind": "rate",
+          "unit": null
+        },
+        "first_retrieval_hit_at_5": {
+          "label": "First-retrieval hit@5 (like-for-like retrieval)",
+          "value": 0.8095238095238095,
+          "count": 34,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "context_hit_at_5": {
+          "label": "Context hit@5 (on contexts given to the generator)",
+          "value": 0.7857142857142857,
+          "count": 33,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "ragas_faithfulness": {
+          "label": "RAGAS faithfulness",
+          "value": 0.9092267419190495,
+          "count": null,
+          "n": 39,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_response_relevancy": {
+          "label": "RAGAS response relevancy",
+          "value": 0.8225267917930427,
+          "count": null,
+          "n": 39,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_context_precision": {
+          "label": "RAGAS context precision (on contexts given to the generator)",
+          "value": 0.7814484126566741,
+          "count": null,
+          "n": 42,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_context_recall": {
+          "label": "RAGAS context recall (on contexts given to the generator)",
+          "value": 0.8214285714285714,
+          "count": null,
+          "n": 42,
+          "kind": "mean",
+          "unit": null
+        },
+        "mean_llm_calls": {
+          "label": "Mean LLM calls per question",
+          "value": 2.32,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "calls"
+        },
+        "mean_tokens": {
+          "label": "Mean tokens per question",
+          "value": 4577.3,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "tokens"
+        },
+        "p50_latency_ms": {
+          "label": "Median latency",
+          "value": 3167.0,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "name": "self_rag",
+      "label": "Self-RAG",
+      "run_dir": "results/runs/self_rag-20261121-0744",
+      "metrics": {
+        "correct": {
+          "label": "Correct answers",
+          "value": 0.8571428571428571,
+          "count": 36,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "correct_or_partial": {
+          "label": "Correct or partial",
+          "value": 0.9047619047619048,
+          "count": 38,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "citation_support": {
+          "label": "Citation support",
+          "value": 0.9736842105263158,
+          "count": 37,
+          "n": 38,
+          "kind": "rate",
+          "unit": null
+        },
+        "abstention_correct": {
+          "label": "Unanswerable correctly declined",
+          "value": 1.0,
+          "count": 8,
+          "n": 8,
+          "kind": "rate",
+          "unit": null
+        },
+        "hallucinated": {
+          "label": "Hallucinated on unanswerable",
+          "value": 0.0,
+          "count": 0,
+          "n": 8,
+          "kind": "rate",
+          "unit": null
+        },
+        "first_retrieval_hit_at_5": {
+          "label": "First-retrieval hit@5 (like-for-like retrieval)",
+          "value": 0.7857142857142857,
+          "count": 33,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "context_hit_at_5": {
+          "label": "Context hit@5 (on contexts given to the generator)",
+          "value": 0.7619047619047619,
+          "count": 32,
+          "n": 42,
+          "kind": "rate",
+          "unit": null
+        },
+        "ragas_faithfulness": {
+          "label": "RAGAS faithfulness",
+          "value": 0.9340498682603945,
+          "count": null,
+          "n": 38,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_response_relevancy": {
+          "label": "RAGAS response relevancy",
+          "value": 0.8190637638685628,
+          "count": null,
+          "n": 38,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_context_precision": {
+          "label": "RAGAS context precision (on contexts given to the generator)",
+          "value": 0.7862804877642218,
+          "count": null,
+          "n": 41,
+          "kind": "mean",
+          "unit": null
+        },
+        "ragas_context_recall": {
+          "label": "RAGAS context recall (on contexts given to the generator)",
+          "value": 0.8170731707317073,
+          "count": null,
+          "n": 41,
+          "kind": "mean",
+          "unit": null
+        },
+        "mean_llm_calls": {
+          "label": "Mean LLM calls per question",
+          "value": 4.2,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "calls"
+        },
+        "mean_tokens": {
+          "label": "Mean tokens per question",
+          "value": 6847.08,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "tokens"
+        },
+        "p50_latency_ms": {
+          "label": "Median latency",
+          "value": 4824.5,
+          "count": null,
+          "n": 50,
+          "kind": "number",
+          "unit": "ms"
+        }
+      }
+    }
+  ]
+}

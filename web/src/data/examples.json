@@ -1,0 +1,26 @@
+[
+  {
+    "id": "q001",
+    "category": "single",
+    "label": "Single page",
+    "question": "My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?"
+  },
+  {
+    "id": "q029",
+    "category": "multi",
+    "label": "Multi-page",
+    "question": "How do I set up a graph with SQLite persistence and resume an interrupted thread?"
+  },
+  {
+    "id": "q009",
+    "category": "version",
+    "label": "Version change",
+    "question": "Which channel mechanism avoids storing redundant duplicate states by persisting only incremental changes?"
+  },
+  {
+    "id": "q043",
+    "category": "unanswerable",
+    "label": "Not in the docs",
+    "question": "Which RetryPolicy argument caps the total wall-clock time a node may spend across all of its retry attempts?"
+  }
+]

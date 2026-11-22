@@ -27,11 +27,17 @@ Commands:
   bundle-check        Check deployment bundle size (added in M01)
   graphs              Export agentic graphs to docs/graphs/*.mmd (added in M10)
   smoke               Run smoke tests against deployed service (added in M12)
+  web-install         npm ci in web/ (added in M13)
+  web-build           npm run build in web/; writes public/ (added in M13)
+  web-test            npm run test in web/ (added in M13)
+  web-lint            npm run lint in web/ (added in M13)
+  web-dev             npm run dev in web/: Vite dev server with the /api proxy (editing only)
 """
 
 import argparse
 import fnmatch
 import hashlib
+import shutil
 import subprocess
 import sys
 import venv
@@ -384,6 +390,43 @@ def cmd_smoke(args: argparse.Namespace, extra_args: list[str]) -> int:
     return 1
 
 
+def run_npm(npm_args: list[str]) -> int:
+    """Run npm in web/. npm is found with shutil.which so npm.cmd works on Windows."""
+    npm = shutil.which("npm")
+    if npm is None:
+        print(
+            "Error: npm not found on PATH. Install the Node.js LTS from nodejs.org.",
+            file=sys.stderr,
+        )
+        return 1
+    return subprocess.run([npm, *npm_args], cwd=REPO_ROOT / "web").returncode
+
+
+def cmd_web_install(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Install the frontend dependencies from web/package-lock.json."""
+    return run_npm(["ci", *extra_args])
+
+
+def cmd_web_build(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Build the frontend into public/."""
+    return run_npm(["run", "build", *extra_args])
+
+
+def cmd_web_test(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Run the frontend tests (vitest)."""
+    return run_npm(["run", "test", *extra_args])
+
+
+def cmd_web_lint(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Lint and type-check the frontend."""
+    return run_npm(["run", "lint", *extra_args])
+
+
+def cmd_web_dev(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Run the Vite dev server (proxies /api to port 8000)."""
+    return run_npm(["run", "dev", *extra_args])
+
+
 def main() -> int:
     argv = sys.argv[1:]
     extra_args = []
@@ -461,6 +504,12 @@ def main() -> int:
     subparsers.add_parser("bundle-check", help="Check bundle size")
     subparsers.add_parser("graphs", help="Export agentic graphs as Mermaid")
 
+    subparsers.add_parser("web-install", help="npm ci in web/")
+    subparsers.add_parser("web-build", help="Build the frontend into public/")
+    subparsers.add_parser("web-test", help="Run frontend tests")
+    subparsers.add_parser("web-lint", help="Lint and type-check the frontend")
+    subparsers.add_parser("web-dev", help="Run the Vite dev server")
+
     smoke_parser = subparsers.add_parser("smoke", help="Run smoke tests")
     smoke_parser.add_argument("--url", required=False, help="Target URL")
 
@@ -478,6 +527,11 @@ def main() -> int:
         "test-live": cmd_test_live,
         "tree": cmd_tree,
         "hash": cmd_hash,
+        "web-install": cmd_web_install,
+        "web-build": cmd_web_build,
+        "web-test": cmd_web_test,
+        "web-lint": cmd_web_lint,
+        "web-dev": cmd_web_dev,
         "ingest": cmd_ingest,
         "index": cmd_index,
         "eval": cmd_eval,

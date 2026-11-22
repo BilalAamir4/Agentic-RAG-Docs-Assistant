@@ -16,6 +16,7 @@
 - **Decision:** User interface build stack.
 - **Choice:** Static HTML/CSS/vanilla JS frontend, no build step.
 - **Reason:** Zero compilation dependencies, instant deployment, and minimal bundle footprint.
+- **Status:** Replaced by D30.
 
 ### D4 Index Architecture
 - **Decision:** Index format and runtime loading strategy.
@@ -279,4 +280,10 @@
 - **Choice:** An async generator (StreamRunner.events) reads items from a daemon worker thread through an asyncio.Queue, so pings, the 50 s total timeout and disconnect detection keep working while an LLM call blocks. Starlette cancels the iterating task on disconnect (measured: finally runs at once), which sets a cancel flag the worker checks before each event. The worker runs in a copy of the caller's context. Traces are flushed after the answer frame only, in a daemon thread bounded by Settings.trace_flush_timeout_s (5 s). ChatGroq gets Settings.llm_timeout_s (20 s) and Settings.llm_max_retries; the default stays 3 (the value used before M12), and production sets LLM_MAX_RETRIES=1 so one call takes at most 2 x 20 s plus backoff, about 40.5 s.
 - **Reason:** A sync generator cannot be stopped on disconnect (S1 measurement); ChatGroq has no timeout by default; flush_traces has no timeout; a call of 80 s or more would exceed both request_timeout_s and Vercel's maxDuration.
 - **Consequence:** An abandoned worker runs until its current call returns. Eval config.json files from now on record llm_max_retries and trace_flush_timeout_s, and the 20 s timeout applies to eval runs.
+- **Date:** 2026-11-22
+
+### D30 Frontend: React, TypeScript, Tailwind and shadcn/ui
+- **Decision:** Frontend stack. Replaces D3 (human instruction, 2026-11-22).
+- **Choice:** React + TypeScript + Tailwind + shadcn/ui, built with Vite from web/ into public/, with the built files committed. Vercel serves public/ as static files and never runs Node; web/ is excluded from the deployment (.vercelignore). All UI primitives come from shadcn/ui, Radix base. No external scripts, styles or fonts; components that inject <style> elements are not used, so the M14 CSP holds.
+- **Reason:** Component primitives with accessible behaviour, without adding anything to the Python bundle.
 - **Date:** 2026-11-22

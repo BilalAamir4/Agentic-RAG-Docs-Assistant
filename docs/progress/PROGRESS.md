@@ -17,6 +17,6 @@ Index of implementation modules and their delivery tracking status.
 | M10 | Corrective RAG | Done (commit 06b2383) | 2026-11-21 | [M10-corrective-rag.md](M10-corrective-rag.md) |
 | M11 | Self-RAG | Done (tag v2-agentic, 56a5043633f81822900d2e9cf6856f6db2059f80) | 2026-11-22 | [M11-self-rag.md](M11-self-rag.md) |
 | M12 | Streaming API | Done | 2026-11-22 | [M12-api.md](M12-api.md) |
-| M13 | Trace UI | Not started | - | - |
+| M13 | Trace UI | Partial (session 1 of 2) | 2026-11-22 | [M13-trace-ui.md](M13-trace-ui.md) |
 | M14 | Production deploy | Not started | - | - |
 | M15 | Results and write-up | Not started | - | - |
