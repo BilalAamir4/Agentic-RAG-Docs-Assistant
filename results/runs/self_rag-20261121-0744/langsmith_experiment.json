@@ -1,0 +1,13 @@
+{
+  "uploads": [
+    {
+      "name": "self_rag-20261121-0744",
+      "id": "902633a2-70f8-4bc5-81a5-56bde62733e7",
+      "url": "https://smith.langchain.com/o/dc790a75-743f-467d-a940-18bb085de125/datasets/6f229f5d-8cff-45b9-840f-3ec576feb329/compare?selectedSessions=902633a2-70f8-4bc5-81a5-56bde62733e7",
+      "dataset_id": "6f229f5d-8cff-45b9-840f-3ec576feb329",
+      "examples": 50,
+      "date": "2026-11-22T10:20:42+00:00",
+      "current": true
+    }
+  ]
+}

@@ -15,7 +15,7 @@ Index of implementation modules and their delivery tracking status.
 | M08 | Eval harness, custom judge, baseline run | Done | 2026-11-18 | [M08-eval-harness.md](M08-eval-harness.md) |
 | M09 | RAGAS, LangSmith experiments, baseline freeze | Done | 2026-11-20 | [M09-ragas-experiments.md](M09-ragas-experiments.md) |
 | M10 | Corrective RAG | Done (commit 06b2383) | 2026-11-21 | [M10-corrective-rag.md](M10-corrective-rag.md) |
-| M11 | Self-RAG | In progress (S2 of 3 done) | 2026-11-21 | [M11-self-rag.md](M11-self-rag.md) |
+| M11 | Self-RAG | Done | 2026-11-22 | [M11-self-rag.md](M11-self-rag.md) |
 | M12 | Streaming API | Not started | - | - |
 | M13 | Trace UI | Not started | - | - |
 | M14 | Production deploy | Not started | - | - |

@@ -1,0 +1,583 @@
+{
+  "run": "self_rag-20261121-0744",
+  "pipeline": "self_rag",
+  "eval_set_sha256": "316b1d683050e426ad5bf2324b9ca7211d30ea2566276320489e6acb538a470f",
+  "index_manifest_hash": "c4576449f124f646b5908b241f89dd216250a7fc12eb6cbbb94505308cbf512e",
+  "tracing_enabled": true,
+  "judge": {
+    "effective_prompt_version": 2,
+    "judge_model": "gemini-3.5-flash-lite",
+    "source": "judge_v2.jsonl",
+    "eligible_n": 38,
+    "judged_n": 38,
+    "complete": true,
+    "usage": {
+      "tokens_in": 65605,
+      "tokens_out": 2366,
+      "calls": 37,
+      "cached": 1
+    }
+  },
+  "overall": {
+    "n": 50,
+    "answerable_n": 42,
+    "judge_missing": 0,
+    "correct": {
+      "count": 36,
+      "n": 42,
+      "rate": 0.8571428571428571
+    },
+    "correct_or_partial": {
+      "count": 38,
+      "n": 42,
+      "rate": 0.9047619047619048
+    },
+    "mean_correctness": {
+      "mean": 1.7619047619047619,
+      "n": 42
+    },
+    "citation_support": {
+      "count": 37,
+      "n": 38,
+      "rate": 0.9736842105263158
+    },
+    "first_retrieval_hit@5": {
+      "count": 33.0,
+      "n": 42,
+      "rate": 0.7857142857142857
+    },
+    "context_hit@5": {
+      "count": 32.0,
+      "n": 42,
+      "rate": 0.7619047619047619
+    },
+    "context_evidence_recall@5": {
+      "mean": 0.6785714285714286,
+      "n": 42
+    },
+    "must_mention_coverage": {
+      "mean": 0.8571428571428571,
+      "n": 42
+    },
+    "false_abstention": {
+      "count": 4,
+      "n": 42,
+      "rate": 0.09523809523809523
+    },
+    "unanswerable_n": 8,
+    "abstention_correct": {
+      "count": 8,
+      "n": 8,
+      "rate": 1.0
+    },
+    "hallucinated": {
+      "count": 0,
+      "n": 8,
+      "rate": 0.0
+    },
+    "mean_llm_calls": {
+      "mean": 4.2,
+      "n": 50
+    },
+    "latency_ms_p50": 4824.5,
+    "latency_ms_p95": 9202.699999999999,
+    "mean_tokens_per_question": {
+      "mean": 6847.08,
+      "n": 50
+    },
+    "used_web": {
+      "count": 7,
+      "n": 50,
+      "rate": 0.14
+    },
+    "structured_output_failures": {
+      "total": 2,
+      "n": 50
+    },
+    "rate_limited_attempts": {
+      "total": 0,
+      "n": 50
+    },
+    "transient_call_errors": {
+      "total": 0,
+      "n": 50
+    },
+    "permanent_call_errors": {
+      "total": 0,
+      "n": 50
+    },
+    "unclassified_call_errors": {
+      "total": 0,
+      "n": 50
+    },
+    "items_with_structured_output_failures": {
+      "count": 1,
+      "n": 50,
+      "rate": 0.02
+    },
+    "structured_call_fallbacks": {
+      "count": 0,
+      "n": 50,
+      "rate": 0.0,
+      "by_type": {
+        "decide_failed": 0,
+        "verify_failed": 0,
+        "regenerate_failed": 0
+      }
+    }
+  },
+  "per_category": {
+    "single": {
+      "n": 28,
+      "answerable_n": 28,
+      "judge_missing": 0,
+      "correct": {
+        "count": 24,
+        "n": 28,
+        "rate": 0.8571428571428571
+      },
+      "correct_or_partial": {
+        "count": 25,
+        "n": 28,
+        "rate": 0.8928571428571429
+      },
+      "mean_correctness": {
+        "mean": 1.75,
+        "n": 28
+      },
+      "citation_support": {
+        "count": 25,
+        "n": 25,
+        "rate": 1.0
+      },
+      "first_retrieval_hit@5": {
+        "count": 21.0,
+        "n": 28,
+        "rate": 0.75
+      },
+      "context_hit@5": {
+        "count": 20.0,
+        "n": 28,
+        "rate": 0.7142857142857143
+      },
+      "context_evidence_recall@5": {
+        "mean": 0.7142857142857143,
+        "n": 28
+      },
+      "must_mention_coverage": {
+        "mean": 0.8214285714285714,
+        "n": 28
+      },
+      "false_abstention": {
+        "count": 3,
+        "n": 28,
+        "rate": 0.10714285714285714
+      },
+      "unanswerable_n": 0,
+      "abstention_correct": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "hallucinated": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "mean_llm_calls": {
+        "mean": 4.035714285714286,
+        "n": 28
+      },
+      "latency_ms_p50": 4601.0,
+      "latency_ms_p95": 7316.899999999999,
+      "mean_tokens_per_question": {
+        "mean": 6640.392857142857,
+        "n": 28
+      },
+      "used_web": {
+        "count": 1,
+        "n": 28,
+        "rate": 0.03571428571428571
+      },
+      "structured_output_failures": {
+        "total": 0,
+        "n": 28
+      },
+      "rate_limited_attempts": {
+        "total": 0,
+        "n": 28
+      },
+      "transient_call_errors": {
+        "total": 0,
+        "n": 28
+      },
+      "permanent_call_errors": {
+        "total": 0,
+        "n": 28
+      },
+      "unclassified_call_errors": {
+        "total": 0,
+        "n": 28
+      },
+      "items_with_structured_output_failures": {
+        "count": 0,
+        "n": 28,
+        "rate": 0.0
+      },
+      "structured_call_fallbacks": {
+        "count": 0,
+        "n": 28,
+        "rate": 0.0,
+        "by_type": {
+          "decide_failed": 0,
+          "verify_failed": 0,
+          "regenerate_failed": 0
+        }
+      }
+    },
+    "multi": {
+      "n": 8,
+      "answerable_n": 8,
+      "judge_missing": 0,
+      "correct": {
+        "count": 6,
+        "n": 8,
+        "rate": 0.75
+      },
+      "correct_or_partial": {
+        "count": 7,
+        "n": 8,
+        "rate": 0.875
+      },
+      "mean_correctness": {
+        "mean": 1.625,
+        "n": 8
+      },
+      "citation_support": {
+        "count": 6,
+        "n": 7,
+        "rate": 0.8571428571428571
+      },
+      "first_retrieval_hit@5": {
+        "count": 7.0,
+        "n": 8,
+        "rate": 0.875
+      },
+      "context_hit@5": {
+        "count": 7.0,
+        "n": 8,
+        "rate": 0.875
+      },
+      "context_evidence_recall@5": {
+        "mean": 0.5,
+        "n": 8
+      },
+      "must_mention_coverage": {
+        "mean": 0.875,
+        "n": 8
+      },
+      "false_abstention": {
+        "count": 1,
+        "n": 8,
+        "rate": 0.125
+      },
+      "unanswerable_n": 0,
+      "abstention_correct": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "hallucinated": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "mean_llm_calls": {
+        "mean": 4.375,
+        "n": 8
+      },
+      "latency_ms_p50": 5475.0,
+      "latency_ms_p95": 8070.449999999999,
+      "mean_tokens_per_question": {
+        "mean": 7622.25,
+        "n": 8
+      },
+      "used_web": {
+        "count": 0,
+        "n": 8,
+        "rate": 0.0
+      },
+      "structured_output_failures": {
+        "total": 0,
+        "n": 8
+      },
+      "rate_limited_attempts": {
+        "total": 0,
+        "n": 8
+      },
+      "transient_call_errors": {
+        "total": 0,
+        "n": 8
+      },
+      "permanent_call_errors": {
+        "total": 0,
+        "n": 8
+      },
+      "unclassified_call_errors": {
+        "total": 0,
+        "n": 8
+      },
+      "items_with_structured_output_failures": {
+        "count": 0,
+        "n": 8,
+        "rate": 0.0
+      },
+      "structured_call_fallbacks": {
+        "count": 0,
+        "n": 8,
+        "rate": 0.0,
+        "by_type": {
+          "decide_failed": 0,
+          "verify_failed": 0,
+          "regenerate_failed": 0
+        }
+      }
+    },
+    "version": {
+      "n": 6,
+      "answerable_n": 6,
+      "judge_missing": 0,
+      "correct": {
+        "count": 6,
+        "n": 6,
+        "rate": 1.0
+      },
+      "correct_or_partial": {
+        "count": 6,
+        "n": 6,
+        "rate": 1.0
+      },
+      "mean_correctness": {
+        "mean": 2.0,
+        "n": 6
+      },
+      "citation_support": {
+        "count": 6,
+        "n": 6,
+        "rate": 1.0
+      },
+      "first_retrieval_hit@5": {
+        "count": 5.0,
+        "n": 6,
+        "rate": 0.8333333333333334
+      },
+      "context_hit@5": {
+        "count": 5.0,
+        "n": 6,
+        "rate": 0.8333333333333334
+      },
+      "context_evidence_recall@5": {
+        "mean": 0.75,
+        "n": 6
+      },
+      "must_mention_coverage": {
+        "mean": 1.0,
+        "n": 6
+      },
+      "false_abstention": {
+        "count": 0,
+        "n": 6,
+        "rate": 0.0
+      },
+      "unanswerable_n": 0,
+      "abstention_correct": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "hallucinated": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "mean_llm_calls": {
+        "mean": 4.0,
+        "n": 6
+      },
+      "latency_ms_p50": 4741.0,
+      "latency_ms_p95": 5993.25,
+      "mean_tokens_per_question": {
+        "mean": 7127.0,
+        "n": 6
+      },
+      "used_web": {
+        "count": 0,
+        "n": 6,
+        "rate": 0.0
+      },
+      "structured_output_failures": {
+        "total": 0,
+        "n": 6
+      },
+      "rate_limited_attempts": {
+        "total": 0,
+        "n": 6
+      },
+      "transient_call_errors": {
+        "total": 0,
+        "n": 6
+      },
+      "permanent_call_errors": {
+        "total": 0,
+        "n": 6
+      },
+      "unclassified_call_errors": {
+        "total": 0,
+        "n": 6
+      },
+      "items_with_structured_output_failures": {
+        "count": 0,
+        "n": 6,
+        "rate": 0.0
+      },
+      "structured_call_fallbacks": {
+        "count": 0,
+        "n": 6,
+        "rate": 0.0,
+        "by_type": {
+          "decide_failed": 0,
+          "verify_failed": 0,
+          "regenerate_failed": 0
+        }
+      }
+    },
+    "unanswerable": {
+      "n": 8,
+      "answerable_n": 0,
+      "judge_missing": 0,
+      "correct": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "correct_or_partial": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "mean_correctness": {
+        "mean": null,
+        "n": 0
+      },
+      "citation_support": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "first_retrieval_hit@5": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "context_hit@5": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "context_evidence_recall@5": {
+        "mean": null,
+        "n": 0
+      },
+      "must_mention_coverage": {
+        "mean": null,
+        "n": 0
+      },
+      "false_abstention": {
+        "count": 0,
+        "n": 0,
+        "rate": null
+      },
+      "unanswerable_n": 8,
+      "abstention_correct": {
+        "count": 8,
+        "n": 8,
+        "rate": 1.0
+      },
+      "hallucinated": {
+        "count": 0,
+        "n": 8,
+        "rate": 0.0
+      },
+      "mean_llm_calls": {
+        "mean": 4.75,
+        "n": 8
+      },
+      "latency_ms_p50": 8533.5,
+      "latency_ms_p95": 25534.749999999985,
+      "mean_tokens_per_question": {
+        "mean": 6585.375,
+        "n": 8
+      },
+      "used_web": {
+        "count": 6,
+        "n": 8,
+        "rate": 0.75
+      },
+      "structured_output_failures": {
+        "total": 2,
+        "n": 8
+      },
+      "rate_limited_attempts": {
+        "total": 0,
+        "n": 8
+      },
+      "transient_call_errors": {
+        "total": 0,
+        "n": 8
+      },
+      "permanent_call_errors": {
+        "total": 0,
+        "n": 8
+      },
+      "unclassified_call_errors": {
+        "total": 0,
+        "n": 8
+      },
+      "items_with_structured_output_failures": {
+        "count": 1,
+        "n": 8,
+        "rate": 0.125
+      },
+      "structured_call_fallbacks": {
+        "count": 0,
+        "n": 8,
+        "rate": 0.0,
+        "by_type": {
+          "decide_failed": 0,
+          "verify_failed": 0,
+          "regenerate_failed": 0
+        }
+      }
+    }
+  },
+  "totals": {
+    "tokens_in": 262551,
+    "tokens_out": 79803,
+    "llm_calls": 210,
+    "usage_missing": 0,
+    "by_model": {
+      "openai/gpt-oss-120b": {
+        "input_tokens": 76926,
+        "output_tokens": 21749,
+        "calls": 53,
+        "usage_missing": 0
+      },
+      "openai/gpt-oss-20b": {
+        "input_tokens": 185625,
+        "output_tokens": 58054,
+        "calls": 157,
+        "usage_missing": 0
+      }
+    }
+  }
+}
