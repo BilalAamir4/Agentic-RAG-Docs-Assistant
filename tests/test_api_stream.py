@@ -39,6 +39,7 @@ SECRETS = {
     "tavily_api_key": "t-secret",
     "upstash_redis_rest_url": "https://u.example",
     "upstash_redis_rest_token": "u-secret",
+    "ip_hash_salt": "fake-salt-0000",
 }
 
 

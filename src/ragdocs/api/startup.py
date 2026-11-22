@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 # D18: production tracing needs a sampling rate at or below this value.
 MAX_PRODUCTION_SAMPLING_RATE = 0.1
 
-REQUIRED_KEYS = ("GROQ_API_KEY", "GOOGLE_API_KEY", "TAVILY_API_KEY")
+REQUIRED_KEYS = ("GROQ_API_KEY", "GOOGLE_API_KEY", "TAVILY_API_KEY", "IP_HASH_SALT")
 UPSTASH_KEYS = ("UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN")
 
 
@@ -23,7 +23,8 @@ def _is_missing(settings: Settings, env_name: str) -> bool:
 def validate_runtime_settings(settings: Settings) -> None:
     """Raise RuntimeError in production for unsafe settings; warn locally.
 
-    Messages name settings, never values. COHERE_API_KEY is not checked: the API runs
+    Messages name settings, never values. IP_HASH_SALT is required too: without it the rate-limit
+    keys would be unsalted hashes of client IPs. COHERE_API_KEY is not checked: the API runs
     with use_reranker False.
     """
     missing = [n for n in (*UPSTASH_KEYS, *REQUIRED_KEYS) if _is_missing(settings, n)]

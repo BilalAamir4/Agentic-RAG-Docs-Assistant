@@ -38,6 +38,7 @@ SECRETS = {
     "tavily_api_key": "t-secret",
     "upstash_redis_rest_url": "https://example.upstash.io",
     "upstash_redis_rest_token": "u-secret",
+    "ip_hash_salt": "fake-salt-0000",
 }
 
 
@@ -221,7 +222,8 @@ def test_local_never_raises_and_warns(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         validate_runtime_settings(bare)
     messages = [r.getMessage() for r in caplog.records]
-    assert len(messages) == 5
+    assert len(messages) == 6
+    assert any("IP_HASH_SALT" in m for m in messages)
     assert any("UPSTASH_REDIS_REST_URL" in m for m in messages)
     assert not any("COHERE" in m for m in messages)
 
