@@ -266,3 +266,10 @@
 - **Choice:** With Settings.max_query_rewrites = 1 and Settings.max_regenerations = 1, the worst case is decide 1 + grade 2 + rewrite 1 + generate 1 + verify 2 + regenerate 1 = 8 calls. Fallbacks (D26) add no calls. Corrective's bound stays 4 (grade 2 + rewrite 1 + generate 1).
 - **Reason:** A fixed bound keeps Groq quota planning and latency predictable, and tests can assert it.
 - **Date:** 2026-11-21
+
+### D28 Rate Limiter Fails Closed
+- **Decision:** Behaviour of the API when the rate-limit store (Upstash) is unreachable or returns an error.
+- **Choice:** Upstash failure in production: requests are refused with 503 rather than allowed, so an outage cannot remove the quota protection. The limiter logs one WARNING naming only the exception class (no IP, key or token).
+- **Reason:** The Groq, Tavily and Gemini free quotas are the scarce resource (D10); an open failure mode would let any outage or a deliberate Upstash block exhaust them.
+- **Date:** 2026-11-22
+

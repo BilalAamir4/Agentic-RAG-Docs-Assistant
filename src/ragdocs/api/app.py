@@ -2,17 +2,88 @@
 
 import importlib
 import importlib.metadata
+import logging
 import os
 import platform
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
+from ragdocs.api.models import ERR_INTERNAL, ERR_TOO_LARGE, QuestionError
+from ragdocs.api.preflight import BodyTooLarge, error_response, validation_message
+from ragdocs.api.startup import validate_runtime_settings
 from ragdocs.config import get_settings
 
-app = FastAPI(title="LangGraph Docs Assistant")
+logger = logging.getLogger(__name__)
+
+PIPELINES: list[dict[str, str]] = [
+    {
+        "name": "baseline",
+        "label": "Baseline RAG",
+        "description": (
+            "Retrieves documentation excerpts with hybrid search and answers from them "
+            "in one LLM call."
+        ),
+    },
+    {
+        "name": "corrective",
+        "label": "Corrective RAG",
+        "description": (
+            "Grades the retrieved excerpts, rewrites the query once if none are relevant, "
+            "then falls back to a web search of the docs site."
+        ),
+    },
+    {
+        "name": "self_rag",
+        "label": "Self-RAG",
+        "description": (
+            "Decides whether retrieval is needed, runs the corrective steps, then checks "
+            "the answer against the excerpts and regenerates or abstains if it is unsupported."
+        ),
+    },
+]
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Validate runtime settings once at startup (raises in production when unsafe)."""
+    validate_runtime_settings(get_settings())
+    yield
+
+
+app = FastAPI(title="LangGraph Docs Assistant", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Return the exact 422 body for a malformed request."""
+    return error_response(422, validation_message(list(exc.errors())))
+
+
+@app.exception_handler(QuestionError)
+async def handle_question_error(_request: Request, exc: QuestionError) -> JSONResponse:
+    """Return 422 with the question error message."""
+    return error_response(422, exc.message)
+
+
+@app.exception_handler(BodyTooLarge)
+async def handle_body_too_large(_request: Request, _exc: BodyTooLarge) -> JSONResponse:
+    """Return 413 for an oversized request body."""
+    return error_response(413, ERR_TOO_LARGE)
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected(_request: Request, exc: Exception) -> JSONResponse:
+    """Return a generic 500; log the class and traceback, never the request body."""
+    logger.error("Unhandled %s", type(exc).__name__, exc_info=exc)
+    return error_response(500, ERR_INTERNAL)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -62,7 +133,13 @@ def get_health() -> dict[str, str]:
     }
 
 
-# Temporary: removed in M12.
+@app.get("/api/pipelines")
+def get_pipelines() -> dict[str, list[dict[str, str]]]:
+    """List the selectable pipelines."""
+    return {"pipelines": PIPELINES}
+
+
+# Temporary: removed in M14.
 @app.get("/api/deps-probe")
 def get_deps_probe() -> dict[str, Any]:
     """Probe runtime package versions and import times for requirements.txt packages."""

@@ -1,6 +1,7 @@
 M11: Self-RAG
 Status: Done
 Date: 2026-11-22
+Tag v2-agentic: 56a5043633f81822900d2e9cf6856f6db2059f80
 
 Goal
 M11 adds a "self_rag" mode to the M10 LangGraph pipeline: decide_retrieval before the corrective path, and verify_answer, regenerate and abstain after generate. It is split into three sessions: S1 groundwork, S2 graph (section "Session 2" below), S3 evaluation. S1 wrote no self_rag state, prompt, node or wiring and made no Groq, Gemini or Tavily call. S2 built the graph and ran the decide probe and four smoke asks; it ran no eval, ragas or experiment.

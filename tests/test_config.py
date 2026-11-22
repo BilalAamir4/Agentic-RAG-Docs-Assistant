@@ -43,8 +43,8 @@ def test_settings_defaults_without_env(tmp_path: Path, monkeypatch: pytest.Monke
     assert settings.rerank_top_n == 5
     assert settings.final_k == 5
     assert settings.max_question_chars == 500
-    assert settings.rate_limit_per_ip_per_hour == 20
-    assert settings.daily_global_cap == 300
+    assert settings.rate_limit_per_ip_per_hour == 5
+    assert settings.daily_global_cap == 32
     assert settings.max_query_rewrites == 1
     assert settings.max_regenerations == 1
     assert settings.docs_domain == "docs.langchain.com"

@@ -29,9 +29,10 @@ class Settings(BaseSettings):
     google_api_key: SecretStr | None = None
     cohere_api_key: SecretStr | None = None
     tavily_api_key: SecretStr | None = None
-    tavily_api_key: SecretStr | None = None
     upstash_redis_rest_url: SecretStr | None = None
     upstash_redis_rest_token: SecretStr | None = None
+    # Salt for hashing client IPs in rate-limit keys (M12); the raw IP is never stored.
+    ip_hash_salt: SecretStr | None = None
 
     # LangSmith tracing (M07). Field names match the env vars read by langsmith 0.14.7
     # (langsmith/utils.py get_env_var). ragdocs.tracing.configure_tracing exports them.
@@ -71,8 +72,19 @@ class Settings(BaseSettings):
 
     # Application limits and guardrails
     max_question_chars: int = 500
-    rate_limit_per_ip_per_hour: int = 20
-    daily_global_cap: int = 300
+    rate_limit_per_ip_per_hour: int = 5
+    # M12 S1 Step 2a: min over Groq TPD/RPD, Tavily and embedding quotas (32, from
+    # gpt-oss-20b tokens on self_rag); see docs/progress/M12-api.md.
+    daily_global_cap: int = 32
+    # M12 API limits: request body bytes, per-request wall time, SSE keep-alive
+    # interval, and the per-call Groq timeout S2 passes to ChatGroq.
+    max_body_bytes: int = 8192
+    request_timeout_s: float = 50.0
+    sse_ping_interval_s: float = 10.0
+    llm_timeout_s: float = 20.0
+    # Timeout for each Upstash REST call; the upstash-redis client has none (httpx
+    # timeout=None), so ragdocs.api.ratelimit sets this one.
+    upstash_timeout_s: float = 3.0
     max_query_rewrites: int = 1
     # Self-RAG (M11): regenerations allowed per question after verify_answer rejects
     # an answer (D27 call bound).
