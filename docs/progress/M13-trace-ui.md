@@ -1,5 +1,5 @@
 M13: Trace UI
-Status: Partial (session 1 of 2)
+Status: Partial (manual checks pending)
 Date: 2026-11-22
 
 Goal
@@ -124,3 +124,115 @@ Component tree
 - Allowed shadcn components (no others without approval): button, textarea, label, radio-group, card, badge, table, alert, collapsible, separator, skeleton. No scroll-area, sonner or toast.
 - Styles: never set styles via setAttribute("style") or a style="" attribute or a <style> element; React's style prop is allowed.
 - Existing events to handle from M12: SSE `trace`, `answer`, `error`, ": ping" comments; HTTP errors 413, 422, 429 (Retry-After), 503, 500 before the stream.
+
+S2 results (2026-11-22)
+
+Built (web/src)
+- lib: sse.ts (SseParser), ask.ts (askStream, mapErrorResponse), outcome.ts, render-answer.ts, sources.ts, countdown.ts (startCountdown, testable with fake timers), trace.ts (retrievalChunks, chunkLabel, decisionReason); config.ts gained DEFAULT_RETRY_AFTER_S and the MSG_* strings. Tests: sse, ask, outcome, render-answer, sources, countdown, trace (.test.ts).
+- hooks/use-ask-run.ts (run state idle/running/done/failed, abort of the previous run, abort on unmount, 429 countdown). App.tsx uses it; the S1 TODO is removed.
+- components: AskPanel (Loader2Icon spinner, input error under the Textarea, 429 Alert with countdown), TracePanel (rows by type, Collapsible chunk table, decision rows with data-node, data-outcome and data-tag, summary row, stick-to-bottom scroll), AnswerPanel (Skeleton, abstain Alert, safe answer blocks, Sources list, destructive Alert). Every file is under 250 lines (AskPanel 230).
+- public/: rebuilt (final build: index-BHnsNVU9.js 318.68 kB, index-BFdCzbOP.css 44.89 kB). docs/screenshots/: ui-s1-static.png, ui-baseline.png, ui-corrective.png, ui-self-rag.png, ui-dark.png.
+
+Step 0
+- Browser tool: the Chrome extension works (JavaScript, screenshots, console reader) after the human reconnected it. It cannot set the viewport width: resize_window reports success but innerWidth stays 1920 (outerWidth 1920 at screen position 0,0, so the window looks maximized); window.open for a popup is blocked. Chrome is in dark mode (prefers-color-scheme: dark matches) and the tool cannot emulate light.
+- S1 browser checks: pipelines load (3 radios), results table loads (14 body rows), page title "LangGraph Docs Assistant". Console: read_console_messages returned no messages on every page load (tracking on); a securitypolicyviolation listener installed after load recorded none through all runs. The CSP header itself was not re-read in the browser. ui-s1-static.png saved at 1920 px wide, dark scheme (not 1280, not light).
+- cn provenance: PASS. `npm ls cn`: cn@0.5.2 (top level; shadcn and @shadcn/registry each carry a nested cn@0.2.6). `npm view cn`: version 0.5.2, repository git+https://github.com/shadcn-ui/cn.git, maintainer shadcn <m@shadcn.com>, modified 2026-11-02T08:02:09Z. package-lock.json node_modules/cn is 0.5.2 (equals installed). `npx shadcn view utils` (CLI 4.23.0) prints registry/radix-nova/lib/utils.ts with content `export { cn } from "cn"` and dependencies ["cn"]; `npx shadcn add utils --dry-run` reports src/lib/utils.ts "skip (identical)".
+- npm audit (4 moderate, no fix applied; npm's only suggested fix is shadcn 1.0.0, a semver-major downgrade):
+  | package | severity | advisory | path | in public/ |
+  | minimatch | moderate | 1244623 (denial of service via globparts amplification) | shadcn > ts-morph > @ts-morph/common > minimatch | no |
+  | @ts-morph/common | moderate | via minimatch | shadcn > ts-morph > @ts-morph/common | no |
+  | ts-morph | moderate | via @ts-morph/common | shadcn > ts-morph | no |
+  | shadcn | moderate | via ts-morph | direct dependency | no (only its tailwind.css is imported; the built JS and CSS contain none of "minimatch", "ts-morph", "globparts", "shadcn") |
+  All four are build tooling: left for M14.
+
+Verification (offline)
+- `py tasks.py web-lint`: oxlint plus tsc; only the two accepted warnings (ui/badge.tsx:48, ui/button.tsx:66).
+- `py tasks.py web-test` (after the Stop button): "Test Files 10 passed (10)", "Tests 71 passed (71)" (S1 had 7).
+- `py tasks.py web-build`: built in 506 ms.
+- `py tasks.py lint`: "All checks passed!" and ruff format check clean. `py tasks.py test`: "449 passed, 1 deselected in 39.86s" (same as S1; no Python test changed).
+- `py tasks.py bundle-check`: "Total bundle size: 230.40 MB (limit: 400.00 MB)" (S1: 230.40 MB).
+- `git diff 8e63e8b --stat -- requirements.txt requirements-dev.txt api/index.py vercel.json src/ragdocs/pipelines src/ragdocs/api/app.py`: empty.
+
+Step 4 browser checks (page at http://127.0.0.1:8000/, built files, 1920 px wide, dark scheme)
+1. Streaming, baseline "Version change": PASS. Rows arrived at performance.now() 11060, 11716, 11716, 13487, 13495 ms: 4 distinct times over 2.4 s. A self_rag run arrived in node-sized bursts at 68139, 68748, 69441-69446, 70706-70711, 71443-71448 ms (3.3 s).
+2. Screenshots: ui-baseline.png, ui-corrective.png, ui-self-rag.png saved (retrieval row expanded on self_rag; decision rows are not collapsible). DEVIATION: 1920 px wide and dark scheme, not 1280 px and light. The layout container is max 1200 px wide and centred, so the content is the same width as at 1280.
+3. Abstention, "Not in the docs" on self_rag: PASS. Neutral Alert "The docs do not answer this question." shows with the model text; decisions RETRY x6 then INFO x2, coherent with the web-search fallback.
+4. Mobile (390 px): NOT DONE. The viewport cannot be set. ui-mobile.png does not exist.
+5. Dark mode: ui-dark.png saved (this Chrome is in dark scheme; the abstain run with amber, red-free badges, borders and the code block in ui-baseline.png are readable). Light scheme was never seen in a browser. Manual check for the human: in Chrome DevTools > Rendering > "Emulate CSS media feature prefers-color-scheme: light", reload and ask once; check badges, borders and code blocks.
+6. Decision messages: see the table below.
+7. Keyboard only: PASS. Tab reached "Source on GitHub", the Textarea, then the pipeline radio group; the question was typed; Space selected Baseline (ArrowUp moved focus; the tool's synthetic arrow key did not select by itself); Shift+Tab back; Ctrl+Enter submitted (the key name "ctrl+Return" in the tool did nothing, "ctrl+Enter" works); focus stayed in the Textarea; the run completed (5 rows, "Total 2.0 s · 1 LLM calls · no web search"); the collapsible trigger opened with Enter and closed with Space. A focus ring (box-shadow or outline) was present on every focused element.
+8. 429 (RAGDOCS_LOCAL_FAKE_LIMIT=ip): PASS. Alert "Rate limit reached. Try again later." with "Try again in 5 s" counting 5, 4, 3, 2, 1 once per second; the Ask button unavailable throughout; at 0 the Alert disappeared and the button was available again.
+9. 503 (global): PASS. "The demo's daily budget is used up. It resets at 00:00 UTC." shows in the answer panel in red; Ask available.
+10. Network failure (server stopped, page open): PASS. "Could not reach the server." in the answer panel; Ask available.
+11. Abort, replaced by the Stop check (human decision, see "Stop button" below): PASS. A page reload 1.5 s into a self_rag ask also made the server log `outcome=disconnected latency_ms=1703` (earlier build, before Stop existed).
+12. CSP and console: no console messages and no securitypolicyviolation events through all runs above. The tool cannot see network-error console lines.
+
+Arrival times: in check 1.
+
+Decision messages (data-outcome read from the page; tag is the badge text)
+| pipeline | node | message | data.outcome | tag |
+| corrective | grade_documents | 4 of 5 chunks relevant | ok | OK |
+| corrective | grade_documents | Route to generate: 4 relevant chunk(s) >= 1 | ok | OK |
+| corrective | generate | Generating from 4 graded excerpts and 0 web results | info | INFO |
+| self_rag | decide_retrieval | retrieval needed: Asks about LangGraph channel mechanism | ok | OK |
+| self_rag | grade_documents | 4 of 5 chunks relevant | ok | OK |
+| self_rag | grade_documents | Route to generate: 4 relevant chunk(s) >= 1 | ok | OK |
+| self_rag | generate | Generating from 4 graded excerpts and 0 web results | info | INFO |
+| self_rag | verify_answer | (text not captured) | ok | OK |
+| self_rag (abstain) | decide_retrieval | retrieval needed: LangGraph docs cover RetryPolicy arguments | ok | OK |
+| self_rag (abstain) | grade_documents | 0 of 5 chunks relevant | retry | RETRY |
+| self_rag (abstain) | grade_documents | Route to rewrite_query: too few relevant chunks; rewrite 1 of 1 | retry | RETRY |
+| self_rag (abstain) | rewrite_query | query rewritten | retry | RETRY |
+| self_rag (abstain) | grade_documents | 0 of 5 chunks relevant | retry | RETRY |
+| self_rag (abstain) | grade_documents | Route to web_search: too few relevant chunks after 1 rewrite(s) | retry | RETRY |
+| self_rag (abstain) | web_search | fell back to web search | retry | RETRY |
+| self_rag (abstain) | generate | Generating from 0 graded excerpts and 1 web results | info | INFO |
+| self_rag (abstain) | verify_answer | verification skipped: abstained | info | INFO |
+The baseline sends no decision events.
+
+Decisions made
+- The Ask button uses aria-disabled (not the disabled attribute) while running, during a countdown and under 3 characters. A real click on a button that becomes disabled moved focus to BODY (seen in the browser); with aria-disabled focus stays on the button (verified), and submit() ignores clicks and Enter while unavailable.
+- AskError {kind, message, retryAfterS?} is what onError receives; the extra kind "stream" covers an error frame, a dropped stream and unreadable data. askStream takes an optional fifth argument (fetch function) for tests.
+- Answer text keeps single newlines inside text parts; CSS (whitespace-pre-line) shows them as line breaks.
+- Sources come from answer.citations only, not from [n] markers; the markers link when the number is in the source list.
+
+Deviations from the prompt
+1. Check 11 ("start a second ask while the first runs") cannot be done in the UI, because Ask and Ctrl+Enter must be unavailable while running. The human decided: keep Ask unavailable, add a Stop button, and replace check 11 with a live Stop check (below). The cancel-on-new-ask path (RunManager.start aborts the previous run) stays for unmount and page unload (a `pagehide` listener) and is unit-tested.
+2. Browser limits: 1920 px viewport and dark scheme instead of 1280 px and light; no mobile screenshot or scrollWidth check; the dark-mode screenshot is simply the scheme this Chrome uses.
+3. Decision rows also show data.reason (small, muted) when it is a string; the prompt did not ask for it.
+4. Live asks (about 8 on the three pipelines) went through `py tasks.py dev`, which does not install the budget recorder, so cache/budget.json did not count them (the budget table still showed gpt-oss-120b 0/200,000 afterwards). The pre-check (`budget --need`) fit: gpt-oss-120b 40,000 tokens 25 requests, gpt-oss-20b 12,000 tokens 15 requests, gemini-embedding-001 2,000 tokens 10 requests. Estimated use from the eval means (2.3K, 4.6K, 6.8K tokens per question): about 40K tokens.
+5. Committed as Partial ("M13 (2/2): trace UI, manual checks pending"), not pushed.
+
+Known issues and limitations
+- The model writes **bold** markdown; only fences, inline code and [n] are interpreted, so the asterisks show literally.
+- The browser cached "/" (index.html) across a rebuild; the page showed the old bundle until /index.html was opened. M14: no-cache for / and index.html (already in the carry-over).
+- Retrieval tables show the title only (baseline and corrective send heading_path too; shown only when the title is empty).
+
+M14 carry-over additions
+- Dev-dependency advisories left open: minimatch 1244623 and the three packages that depend on it (shadcn > ts-morph > @ts-morph/common > minimatch).
+- CI step: run `npm audit --omit=dev` in web/ so an advisory in a runtime package fails the build. Note shadcn is listed under dependencies, so it counts as runtime in that command; consider moving it to devDependencies (its CSS is bundled, its code is not) or the step will fail on the four advisories above.
+- S1 items above remain.
+
+
+Stop button (added after the human's decisions of 2026-11-22)
+- Ask stays aria-disabled while a run is in progress and Ctrl+Enter is ignored (canSubmit in lib/run-state.ts). A shadcn Button, variant outline, "Stop", sits next to Ask and is shown only while running. It calls RunManager.stop(): the current AbortController is aborted and the run state becomes "stopped". The trace keeps the rows received and ends with a muted row "Stopped by you" (data-type="stopped"); the answer panel shows a neutral Alert "Stopped before an answer arrived." (when no answer had rendered); Ask is available again and focus moves to it (the Ask button has id ask-button).
+- New files: lib/run-state.ts (reducer, canSubmit), lib/run-manager.ts (RunManager: start, stop, abort), hooks/use-pipelines.ts and components/PipelineChoice.tsx (split out of AskPanel to keep it under 250 lines). useAskRun is now a thin hook over useReducer and RunManager.
+- Vitest: run-state.test.ts (reducer: start clears, stop keeps rows and marks stopped, stop only while running, 429 tick/reset; canSubmit: ignored while running, during a countdown, for short questions) and run-manager.test.ts (stop aborts the signal and the reducer ends with status stopped and the received rows; no handler fires after abort even when more frames arrive; a new start aborts the previous run and ignores its rows; stop with no run does nothing). The tests use no timers (microtask flushing). Limitation: no DOM test environment (no jsdom), so the Stop button click and the focus move were checked in the browser, not in Vitest.
+- Live check (replaces check 11), self_rag "Version change", real click on Ask, then a script waited for the second trace row and called click() on the Stop button: PASS.
+  - Rows at the click: 3 (the first three events arrived in one burst). After the click only "Stopped by you" was added (+18 ms); no rows were added during the next 5 s (MutationObserver); final row count 4.
+  - Answer panel: "Stopped before an answer arrived."; focus on the Ask button, Ask available, Stop gone; no CSP violation.
+  - Server log: `2026-11-22 22:58:46,059 INFO ragdocs.api: pipeline=self_rag outcome=disconnected latency_ms=3889 llm_calls=- used_web=- question_chars=105`. The click was at 22:58:46.040 (browser clock, same machine): a gap of about 19 ms.
+  - Change from the spec: Stop replaces the "second ask" abort check.
+- Final verification (after Stop): `py tasks.py web-lint`: only the two accepted warnings; `py tasks.py web-build`: built in 399 ms; `py tasks.py lint`: all checks passed; `py tasks.py test`: "449 passed, 1 deselected in 31.63s". Budget pre-check for the 1 live ask fit (gpt-oss-120b 8,000 tokens 6 requests; gpt-oss-20b 3,000 tokens 4 requests; gemini-embedding-001 500 tokens 2 requests).
+
+Recorded limits
+- Screenshots ui-baseline.png, ui-corrective.png, ui-self-rag.png, ui-dark.png and ui-s1-static.png were taken in dark mode at 1920 px wide. The layout is capped at 1200 px wide and centred, so they match what 1280 px shows.
+- Chrome on Windows cannot go below about 500 px wide, so the browser tool could not do the 390 px check; ui-mobile.png does not exist yet.
+- About 9 dev-server asks (about 47,000 tokens on the eval keys, estimated from the eval means) were not recorded in cache/budget.json, because `py tasks.py dev` does not install the budget recorder.
+
+Manual checks for Bilal
+A. Light mode: in Chrome, open Settings > Appearance > Mode and choose Light. If the page stays dark, switch Windows to light mode instead (Settings > Personalization > Colors). Reload http://127.0.0.1:8000/ and check that text, badges, borders and code blocks are readable. Then switch back.
+B. Mobile, 390 px: open DevTools (F12), turn on the device toolbar (Ctrl+Shift+M), and set the width to 390 and the height to 844. Run the "Single page" example on self_rag. In the Console, run:
+   document.documentElement.scrollWidth === document.documentElement.clientWidth
+   It must print true. Then, from the DevTools three-dot menu, run "Capture screenshot" and save the file as docs/screenshots/ui-mobile.png.
+C. Reply with "light ok/not ok", "mobile true/false", and say whether ui-mobile.png is saved.

@@ -20,5 +20,17 @@ export const DEFAULT_PIPELINE = 'self_rag'
 /** Characters of an example question shown on its button. */
 export const EXAMPLE_PREVIEW_CHARS = 60
 
+/** Seconds to wait after a 429 that names no Retry-After value. */
+export const DEFAULT_RETRY_AFTER_S = 60
+
+/** Messages for failures that have no server text. */
+export const MSG_CONNECTION_CLOSED = 'The connection closed before an answer arrived.'
+export const MSG_UNREADABLE = 'The server sent an unreadable response.'
+export const MSG_NETWORK = 'Could not reach the server.'
+export const MSG_SERVER = 'Something went wrong on the server.'
+export const MSG_REJECTED = 'The request was not accepted.'
+export const MSG_STOPPED = 'Stopped before an answer arrived.'
+export const MSG_UNAVAILABLE = 'The service is temporarily unavailable.'
+
 /** Link to the full comparison. It 404s until M14 pushes the repository. */
 export const SUMMARY_URL = `${REPO_URL}/blob/main/results/summary.md`
