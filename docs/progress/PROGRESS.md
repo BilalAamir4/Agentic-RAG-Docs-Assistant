@@ -18,5 +18,5 @@ Index of implementation modules and their delivery tracking status.
 | M11 | Self-RAG | Done (tag v2-agentic, 56a5043633f81822900d2e9cf6856f6db2059f80) | 2026-11-22 | [M11-self-rag.md](M11-self-rag.md) |
 | M12 | Streaming API | Done | 2026-11-22 | [M12-api.md](M12-api.md) |
 | M13 | Trace UI | Done | 2026-11-22 | [M13-trace-ui.md](M13-trace-ui.md) |
-| M14 | Production deploy | In progress (session 1 of 2) | 2026-11-23 | [M14-production-deploy.md](M14-production-deploy.md) |
+| M14 | Production deploy | Partial (session 1 of 2) | 2026-11-23 | [M14-production-deploy.md](M14-production-deploy.md) |
 | M15 | Results and write-up | Not started | - | - |
