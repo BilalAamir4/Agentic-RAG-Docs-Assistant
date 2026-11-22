@@ -287,3 +287,8 @@
 - **Choice:** React + TypeScript + Tailwind + shadcn/ui, built with Vite from web/ into public/, with the built files committed. Vercel serves public/ as static files and never runs Node; web/ is excluded from the deployment (.vercelignore). All UI primitives come from shadcn/ui, Radix base. No external scripts, styles or fonts; components that inject <style> elements are not used, so the M14 CSP holds.
 - **Reason:** Component primitives with accessible behaviour, without adding anything to the Python bundle.
 - **Date:** 2026-11-22
+
+### D31 Frontend npm Dependencies and Audit
+- **Decision:** Which npm packages count as runtime, and what CI audits.
+- **Choice:** A package is in `dependencies` only if JS or CSS from it is bundled into `public/`; everything else is a devDependency. Vercel never runs npm, so the split exists for auditing: CI runs `npm audit --omit=dev --audit-level=high` in `web/`, which covers the code visitors' browsers run. Advisories in build-only packages are reviewed by hand when dependencies change.
+- **Reason:** In M14 only `@tailwindcss/vite` was build-only and moved. `shadcn` stays in `dependencies` because `web/src/index.css` imports `shadcn/tailwind.css`, so its CSS is bundled; its code is not. The four moderate advisories (minimatch GHSA-g3hv-75wg-m249 through ts-morph to shadcn) are in the shadcn CLI chain, which is build code, so the audit level is high (it exits 0; plain `--omit=dev` exits 1 on those four). `radix-ui` stays: its source maps list only its `@radix-ui/*` dependencies, which it re-exports.

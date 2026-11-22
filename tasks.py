@@ -26,7 +26,7 @@ Commands:
   dev                 Run local development server (added in M10)
   bundle-check        Check deployment bundle size (added in M01)
   graphs              Export agentic graphs to docs/graphs/*.mmd (added in M10)
-  smoke               Run smoke tests against deployed service (added in M12)
+  smoke               Smoke test a deployment: smoke --url URL [-- extra tools/smoke_prod.py args]
   web-install         npm ci in web/ (added in M13)
   web-build           npm run build in web/; writes public/ (added in M13)
   web-test            npm run test in web/ (added in M13)
@@ -386,8 +386,15 @@ def cmd_bundle_check(args: argparse.Namespace, extra_args: list[str]) -> int:
 
 
 def cmd_smoke(args: argparse.Namespace, extra_args: list[str]) -> int:
-    print("Not implemented yet: added in module M12", file=sys.stderr)
-    return 1
+    """Run tools/smoke_prod.py against --url; further arguments pass through."""
+    if not args.url:
+        print(
+            "Usage: py tasks.py smoke --url URL [-- --local --pipelines baseline]", file=sys.stderr
+        )
+        return 1
+    py = ensure_venv_exists()
+    script = REPO_ROOT / "tools" / "smoke_prod.py"
+    return run_command([str(py), str(script), "--base-url", args.url] + extra_args)
 
 
 def run_npm(npm_args: list[str]) -> int:
@@ -517,7 +524,11 @@ def main() -> int:
         parser.print_help()
         return 0
 
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
+    if unknown:
+        if args.command != "smoke":
+            parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+        extra_args = unknown + extra_args
 
     handlers = {
         "setup": cmd_setup,

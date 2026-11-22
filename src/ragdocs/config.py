@@ -29,8 +29,21 @@ class Settings(BaseSettings):
     google_api_key: SecretStr | None = None
     cohere_api_key: SecretStr | None = None
     tavily_api_key: SecretStr | None = None
-    upstash_redis_rest_url: SecretStr | None = None
-    upstash_redis_rest_token: SecretStr | None = None
+    # Upstash REST credentials. The Vercel Marketplace integration injects KV_REST_API_URL
+    # and KV_REST_API_TOKEN (read-write); the UPSTASH_ names win when both pairs are set.
+    # KV_REST_API_READ_ONLY_TOKEN is deliberately not accepted (it cannot write counters).
+    upstash_redis_rest_url: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "UPSTASH_REDIS_REST_URL", "KV_REST_API_URL", "upstash_redis_rest_url"
+        ),
+    )
+    upstash_redis_rest_token: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_TOKEN", "upstash_redis_rest_token"
+        ),
+    )
     # Salt for hashing client IPs in rate-limit keys (M12); the raw IP is never stored.
     ip_hash_salt: SecretStr | None = None
 

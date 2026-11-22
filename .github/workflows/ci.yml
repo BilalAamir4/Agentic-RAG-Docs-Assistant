@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Set up the Python environment
+        run: python tasks.py setup
+      - name: Lint
+        run: python tasks.py lint
+      - name: Test
+        run: python tasks.py test
+      - name: Bundle size
+        run: python tasks.py bundle-check
+      - name: Install frontend dependencies
+        run: python tasks.py web-install
+      - name: Lint frontend
+        run: python tasks.py web-lint
+      - name: Test frontend
+        run: python tasks.py web-test
+      - name: Build frontend
+        run: python tasks.py web-build
+      - name: Committed public/ matches a fresh build
+        if: runner.os == 'Linux'
+        run: |
+          if [ -n "$(git status --porcelain -- public/)" ]; then
+            git status
+            git diff --stat -- public/
+            exit 1
+          fi
+      - name: Audit frontend runtime dependencies
+        if: runner.os == 'Linux'
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
