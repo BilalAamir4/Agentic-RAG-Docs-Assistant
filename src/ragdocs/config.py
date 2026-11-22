@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     request_timeout_s: float = 50.0
     sse_ping_interval_s: float = 10.0
     llm_timeout_s: float = 20.0
+    # Retries per Groq call after a failure (ChatGroq max_retries). 3 is what
+    # ragdocs.providers.llm passed before M12; production sets 1 so one call fits in
+    # request_timeout_s (see docs/progress/M12-api.md).
+    llm_max_retries: int = 3
+    # Longest a finished request waits for LangSmith to send its trace, seconds.
+    trace_flush_timeout_s: float = 5.0
     # Timeout for each Upstash REST call; the upstash-redis client has none (httpx
     # timeout=None), so ragdocs.api.ratelimit sets this one.
     upstash_timeout_s: float = 3.0

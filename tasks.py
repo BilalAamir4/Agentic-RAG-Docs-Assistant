@@ -358,7 +358,7 @@ def cmd_dev(args: argparse.Namespace, extra_args: list[str]) -> int:
         str(py),
         "-m",
         "uvicorn",
-        "ragdocs.api.app:app",
+        "ragdocs.api.local:app",
         "--reload",
         "--port",
         "8000",

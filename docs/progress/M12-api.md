@@ -1,9 +1,9 @@
 M12: Streaming API
-Status: Partial (session 1 of 2)
+Status: Done
 Date: 2026-11-22
 
 Goal
-Session 1 (this file): the building blocks of the public streaming API, tested without network access. Session 2 writes POST /api/ask (streaming body), the local runner and the live checks. Module prompt: "M12 (1/2): API building blocks", given by the human on 2026-11-22.
+Session 1 (sections up to "S2 handoff"): the building blocks of the public streaming API, tested without network access. Session 2 writes POST /api/ask (streaming body), the local runner and the live checks. Module prompt: "M12 (1/2): API building blocks", given by the human on 2026-11-22.
 
 What was built
 - src/ragdocs/api/sse.py (new): format_event, ping, SSE_HEADERS, SSE_MEDIA_TYPE.
@@ -150,7 +150,7 @@ Open questions for the human
 - None open. Resolved: the test_config.py assertion change (approved).
 
 Proposed follow-ups (out of scope)
-- Choose a smaller max_retries for the API's ChatGroq (see 1f) once S2 measures real latency.
+- (Done in S2: Settings.llm_max_retries, production value 1; see "S2" below.)
 - Consider refunding the global counter or counting only completed questions.
 
 Prerequisites for the next module
@@ -172,3 +172,181 @@ Behaviour S2 must design around
 - Traces (1g): langsmith sends from a background thread; flush_traces blocks until the queue drains (no timeout argument in ragdocs.tracing). With tracing on, flush before the stream ends or the function may be frozen first; with tracing off (default in production, D18) nothing needs flushing.
 - Ping: send ping() every sse_ping_interval_s while waiting for the next pipeline event.
 - Streaming response: use StreamingResponse(media_type=SSE_MEDIA_TYPE, headers=SSE_HEADERS).
+
+
+---
+
+# S2: POST /api/ask, stream runner, local server, live check
+Module prompt: "M12 (2/2)" (streaming endpoint), given by the human on 2026-11-22. Commit: "M12: streaming ask API with rate limits" (not pushed).
+
+## What was built (S2)
+- src/ragdocs/api/stream.py (new): StreamRunner (async generator events() plus a daemon worker thread), log_request, configure_request_logging, default_poll, never_disconnected, message constants.
+- src/ragdocs/api/app.py: lifespan now also calls configure_request_logging and configure_tracing (stores app.state.tracing_active); get_pipeline (lock-guarded cache), reset_pipeline_cache, POST /api/ask, _RecordingLimiter, _peek_body, _log_refused.
+- src/ragdocs/api/local.py (new, local only): configure_local(target, public_dir) adds CORS for http://localhost:8000 and http://127.0.0.1:8000 and mounts StaticFiles(public/, html=True) at "/" after the API routes.
+- src/ragdocs/providers/llm.py: ChatGroq now gets timeout=Settings.llm_timeout_s and max_retries=Settings.llm_max_retries (was a literal 3). No pipeline file changed.
+- src/ragdocs/config.py: llm_max_retries (3), trace_flush_timeout_s (5.0). .env.example: LLM_MAX_RETRIES, TRACE_FLUSH_TIMEOUT_S.
+- tasks.py: dev runs ragdocs.api.local:app. tools/sse_probe.py: --stop-after N.
+- tests/test_api_stream.py (new, 45 test cases). docs/DECISIONS.md: D29.
+- Not changed: ask_preflight, ratelimit, startup, sse, models (S1 code used as is), api/index.py, vercel.json, requirements*.txt, pipelines, retriever, prompts, index, eval set, results/.
+
+## How to run
+- `py tasks.py dev` (API plus public/ on http://127.0.0.1:8000), then `.venv\Scripts\python tools\sse_probe.py --pipeline baseline --question "..."`.
+- `py tasks.py lint`, `py tasks.py test`, `py tasks.py bundle-check`.
+
+## Step 0: async disconnect handling (verified)
+- starlette 1.7.0 responses.py (StreamingResponse.__call__, lines 261 to 282): for ASGI spec_version below 2.4 (uvicorn 0.54 sends 2.3) it runs stream_response and listen_for_disconnect in a task group; on http.disconnect the group is cancelled, so the task iterating the async body receives CancelledError at the generator's current await. For spec_version 2.4 or higher it only notices on the next send (OSError to ClientDisconnect), so a server upgrade changes this: re-run the measurement.
+- Request.is_disconnected() (requests.py line 328) does a non-blocking receive() under a cancelled scope, so it can be awaited while the response streams. It competes with listen_for_disconnect for the same receive channel; either one sees the disconnect, and the cancellation path still runs. The runner polls it once per loop turn as the prompt specifies.
+- Measurement (throwaway tools/_async_disc.py, deleted, not committed; real uvicorn 0.54, async generator awaiting asyncio.sleep(0.5) per yield, httpx client read 2 chunks then closed): the generator received CancelledError and ran finally 0.000 s after the client closed (below the 15 ms Windows clock resolution), with no gc.collect(). The stop condition (over 2 s) was not met.
+- Test tooling: pytest-asyncio 1.4.0 is already pinned in requirements-dev.txt, and anyio 4.15.1 (with its pytest plugin) is installed. Tests use @pytest.mark.asyncio in strict mode (no config change, no new dependency).
+
+## Contract as built (M13 builds against this)
+Routes: GET /api/health, GET /api/pipelines (S1), POST /api/ask. Locally GET / serves public/.
+
+POST /api/ask
+- Request: JSON body `{"question": string, "pipeline": "baseline" | "corrective" | "self_rag"}`; pipeline defaults to "self_rag". The question is stripped, 3 to 500 characters, no control characters except newline and tab. Body at most 8192 bytes.
+- Errors before streaming (JSON, `Content-Type: application/json`):
+
+| Status | Body | When |
+|---|---|---|
+| 413 | `{"error":"Request body too large."}` | body over 8192 bytes (declared or actual) |
+| 422 | `{"error":"Send JSON with a \"question\" string."}` | bad JSON, not an object, question missing or not a string |
+| 422 | `{"error":"Unknown pipeline. Choose baseline, corrective or self_rag."}` | unknown pipeline |
+| 422 | `{"error":"The question must be between 3 and 500 characters."}` | length |
+| 422 | `{"error":"The question contains unsupported control characters."}` | control characters |
+| 429 | `{"error":"Rate limit reached. Try again later.","retry_after_s":N}` plus header `Retry-After: N` | per-IP window (5 per hour) |
+| 503 | `{"error":"The demo's daily budget is used up. It resets at 00:00 UTC."}` | daily global cap (32) |
+| 503 | `{"error":"The service is temporarily unavailable."}` | limiter store failure (D28, fail closed) |
+| 500 | `{"error":"Internal error."}` | unhandled exception before streaming |
+
+- Success: HTTP 200 with headers `Content-Type: text/event-stream; charset=utf-8`, `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, `Connection: keep-alive`. Failures after this point arrive as an SSE `error` event, still with HTTP 200.
+- SSE frames (`event: <name>\ndata: <one-line JSON>\n\n`, compact JSON, UTF-8, not ASCII-escaped):
+  - `trace`: one TraceEvent: `{"type": "node_start"|"node_end"|"decision"|"retrieval", "node": str, "message": str, "data": object, "t_ms": int}`. t_ms is milliseconds since the pipeline started.
+  - `answer`: one PipelineResult (the same JSON the eval files store): `question`, `pipeline`, `answer {text, citations [{chunk_id, url}], abstained}`, `contexts` (RetrievedChunk list), `trace` (all trace events), `llm_calls`, `latency_ms`, `used_web`, and `diagnostics` only when non-empty. Sent at most once, always last. `answer.abstained` tells an abstention from an answer.
+  - `error`: `{"error": string}`, sent at most once, always last. Messages: the pipeline's own safe message (form "ExceptionClass: first line"; it can name a provider error class, so show it as plain text), "The request took too long." (after 50 s), "The server is missing configuration.", "Internal error.".
+  - Keep-alive: the comment frame `: ping\n\n` every 10 s without another frame. It is not an event; EventSource and fetch-based SSE parsers ignore it.
+- Every stream ends with exactly one `answer` or one `error` frame, then the connection closes. A client that disconnects stops the work.
+
+Log line (logger "ragdocs.api", one INFO line per /api/ask request, written to stderr): `pipeline=<name|-> outcome=<answer|abstained|error|timeout|disconnected|limited|invalid> latency_ms=<int> llm_calls=<int|-> used_web=<true|false|-> question_chars=<int|-> [limit_reason=ip|global|unavailable]`. Never the question, answer, IP, client key or any key.
+
+## Step 6: live check (3 pipelines, q001, tracing off, local server)
+Server: LANGSMITH_TRACING=false; see Deviations item 8 for how it was started. q001 question: "My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?" (an eval item, not a visitor question). Probe lines are cut to 150 characters here.
+
+baseline (first event 3.3 s including the lazy pipeline load, total 5.7 s, 4 trace events, ends in answer, exit 0)
+```
+   3.3s  trace      {"type":"node_start","node":"retrieve","message":"Retrieving documentation excerpts","data":{},"t_ms":0}
+   4.0s  trace      {"type":"retrieval","node":"retrieve","message":"Retrieved candidate excerpts","data":{"mode":"hybrid","chunks":[{"rank":1,"title"
+   4.0s  trace      {"type":"node_start","node":"generate","message":"Generating cited answer","data":{},"t_ms":705}
+   5.7s  trace      {"type":"node_end","node":"generate","message":"Answer generated and validated","data":{"dropped_citations":0,"uncited":false},"t_
+   5.7s  answer     {"question":"My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?","pipeline":"baseline","answer":{"te
+first event 3.3s, total 5.7s, trace events 4, last answer
+```
+corrective (first event 2.7 s, total 5.1 s, 10 trace events, ends in answer, exit 0)
+```
+   2.7s  trace      {"type":"node_start","node":"retrieve","message":"Retrieving documentation excerpts","data":{},"t_ms":608}
+   2.7s  trace      {"type":"retrieval","node":"retrieve","message":"Retrieved candidate excerpts","data":{"mode":"hybrid","query":"My agent run stops
+   2.7s  trace      {"type":"node_end","node":"retrieve","message":"Retrieved 5 excerpts","data":{},"t_ms":609}
+   3.7s  trace      {"type":"node_start","node":"grade_documents","message":"Grading 5 excerpts","data":{},"t_ms":1561}
+   3.7s  trace      {"type":"decision","node":"grade_documents","message":"4 of 5 chunks relevant","data":{"grades":[{"index":1,"chunk_id":"0b10c87050
+   5.1s  answer     {"question":"My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?","pipe
+first event 2.7s, total 5.1s, trace events 10, last answer
+```
+self_rag (first event 2.3 s, total 6.4 s, 16 trace events, ends in answer, exit 0)
+```
+   2.3s  trace      {"type":"node_start","node":"decide_retrieval","message":"Deciding whether to retrieve","data":{},"t_ms":582}
+   2.3s  trace      {"type":"decision","node":"decide_retrieval","message":"retrieval needed: Question about LangGraph recursion limit setting.","data
+   2.3s  trace      {"type":"node_end","node":"decide_retrieval","message":"Retrieval decided","data":{},"t_ms":582}
+   2.9s  trace      {"type":"node_start","node":"retrieve","message":"Retrieving documentation excerpts","data":{},"t_ms":1158}
+   2.9s  trace      {"type":"retrieval","node":"retrieve","message":"Retrieved candidate excerpts","data":{"mode":"hybrid","query":"My agent run stops
+   6.4s  answer     {"question":"My agent run stops with GRAPH_RECURSION_LIMIT; where do I set a bigger step cap?","pipe
+first event 2.3s, total 6.4s, trace events 16, last answer
+```
+(The corrective and self_rag blocks show the first 5 lines and the last line; the lines between are omitted.)
+
+- Progressive, not buffered: frames arrive at different times (corrective: 2.7 s, 3.7 s, ..., 5.1 s). No pipeline took over 50 s (longest 6.4 s). Frames that share a timestamp are events the graph produced in one step.
+- 422 (2-character question "ab"): the probe prints `status 422` and the body `{"error":"The question must be between 3 and 500 characters."}`.
+- GET / : 200, first 80 characters `'<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="v'`. public/index.html already exists (the M01 skeleton), so it was not created; M13 owns it. GET /api/health : 200, `'{"status":"ok","env":"local","python":"3.12.9","commit":"local"}'`.
+- Disconnect (self_rag, `--stop-after 2`, run three times): the `outcome=disconnected` log line appeared 0.18 s, 0.12 s and 0.12 s before the probe printed its exit time (server log 21:32:24,552 vs probe exit 21:32:24.731; 21:33:56,236 vs 21:33:56.351; 21:34:22,252 vs 21:34:22.371), so within the 2 s limit. After the disconnect no Groq call was made: with the budget ledger working (second run), gpt-oss-20b requests rose by one (the decide_retrieval call made before the disconnect) and stayed flat for the next 14 s, and gpt-oss-120b stayed at 0 requests. One Gemini embedding call (the retrieve step already in flight) was recorded around the disconnect. llm_calls is "-" for a disconnected request because there is no PipelineResult.
+- Server log lines (INFO, one per /api/ask request; no question text; uvicorn access lines omitted):
+```
+pipeline=baseline outcome=answer latency_ms=5422 llm_calls=1 used_web=false question_chars=80
+pipeline=corrective outcome=answer latency_ms=4718 llm_calls=2 used_web=false question_chars=80
+pipeline=self_rag outcome=answer latency_ms=6078 llm_calls=4 used_web=false question_chars=80
+pipeline=baseline outcome=invalid latency_ms=0 llm_calls=- used_web=- question_chars=-
+pipeline=self_rag outcome=disconnected latency_ms=547 llm_calls=- used_web=- question_chars=80
+pipeline=baseline outcome=answer latency_ms=4812 llm_calls=1 used_web=false question_chars=80
+pipeline=self_rag outcome=disconnected latency_ms=2375 llm_calls=- used_web=- question_chars=80
+pipeline=self_rag outcome=disconnected latency_ms=640 llm_calls=- used_web=- question_chars=80
+```
+(Eight lines for eight /api/ask requests. The 2375 ms line is a disconnect check whose ledger snapshot failed because of a script error, so it was repeated once.)
+- The server was stopped after the checks (port 8000 no longer answers).
+- Not exercised live: the trace flush path (tracing off, the D18 default) and the 50 s timeout (fake-clock tests only).
+
+## Step 3 log audit
+Searched src/ragdocs/pipelines, providers, retrieval and generation for logging calls. Only src/ragdocs/providers/websearch.py logs: a WARNING with the Tavily exception class, status and retry number, and a WARNING listing dropped off-domain result URLs (third-party URLs, not the question or answer). Nothing logs a question or answer. No stop. None changed.
+
+## Step 7: verification
+- `py tasks.py lint`: "All checks passed!", "164 files already formatted".
+- `py tasks.py test`: "434 passed, 1 deselected in 36.41s" (389 after S1 plus 45 in tests/test_api_stream.py).
+- `py tasks.py bundle-check`: "Total bundle size: 230.40 MB (limit: 400.00 MB)".
+- `git diff v2-agentic -- requirements.txt api/index.py vercel.json src/ragdocs/pipelines`: empty (0 bytes).
+- No earlier test was changed. The baseline snapshot and message-fixture tests pass unchanged (no existing test asserted ChatGroq constructor arguments).
+- The new tests sleep at most about 0.1 s in total (a 0.02 s race window, a 1 ms poll loop, the 0.05 s flush timeout). The test run is slower than in S1 (14.89 s to 36.41 s) mainly because of one test that starts a subprocess importing the app.
+
+## Decisions made (S2)
+- D29 (docs/DECISIONS.md): the async-generator-plus-worker-thread design and llm_max_retries 1 in production.
+- llm_max_retries default is 3. ChatGroq's own default is 2, but ragdocs.providers.llm passed 3 before M12 and the prompt wants local runs and eval unchanged, so 3 is "the value used today". Please confirm.
+- Eval writes every non-secret Settings field into config.json (runner.py _settings_snapshot), so runs from now on also record llm_max_retries and trace_flush_timeout_s. llm_timeout_s (20 s, added in S1) now really applies to eval runs too, because ChatGroq receives it; before, the eval used no timeout. A call slower than 20 s is retried up to 3 times and then fails; M15 should know.
+- The route runs ask_preflight in asyncio.to_thread because the limiter makes blocking HTTP calls (up to 3 x 3 s); on the event loop those would stop pings for every other request in the process.
+
+## Deviations from the prompt (S2)
+1. Trace flush wait: the prompt says `wait_for(to_thread(thread.join), timeout)`. I use `to_thread(thread.join, timeout)` and then `thread.is_alive()`. With wait_for, a timeout leaves the executor thread blocked in join() until the flush ends, which also makes asyncio.run wait for it at shutdown; joining with a timeout bounds both.
+2. The worker thread runs inside contextvars.copy_context(). Found in Step 6: the first four asks ran with a plain thread, and the budget recorder (a ContextVar hook in ragdocs.eval.budget_recorder) saw embeddings but no Groq calls. LangChain callbacks and LangSmith tracing context use ContextVars too, so this also keeps tracing parents correct. A test covers it.
+3. configure_request_logging (new): neither uvicorn nor Vercel sets a handler for INFO, so the request log line was dropped (seen with `py tasks.py dev`: only WARNINGs printed). It adds one stderr handler to the "ragdocs.api" logger; records still propagate, so caplog works.
+4. Recording the limiter reason: ask_preflight returns only a response, so the route wraps the limiter (_RecordingLimiter) to know whether a refusal was "limited" (and its reason) or "invalid"; _peek_body re-parses the body for the pipeline name and question length (the text itself is never logged). ask_preflight is unchanged.
+5. `response_model=None` on the route (FastAPI cannot build a response model from `StreamingResponse | JSONResponse`).
+6. local.py uses the absolute path REPO_ROOT/"public" instead of the relative "public" (independent of the working directory) and exposes configure_local so a test can use a temporary directory without mutating the shared app. CORS allows methods GET and POST and the header Content-Type.
+7. StreamRunner has an extra optional argument started_at so latency_ms is measured from the route's start, not from the first events() call.
+8. The live server was started with a scratchpad launcher (not committed) that calls install_budget_recorder and then uvicorn.run("ragdocs.api.local:app") in the same process, instead of `py tasks.py dev`. Reason: the AGENTS.md rule that every live call goes through the budget recorder, and ragdocs.api must not import ragdocs.eval. `py tasks.py dev` itself was checked separately (it starts, serves / and /api/health, no live call). LANGSMITH_TRACING=false was set in the process environment.
+9. Live asks: 3 required, plus 3 extra (two partial self_rag asks for the disconnect check and one baseline ask to confirm the recorder after fix 2), and one more partial self_rag ask from the first disconnect run (4 on the first server, 3 on the second; 7 in total). Budget was checked with `py tasks.py budget --need` before each batch: openai/gpt-oss-120b 10000:8 fits, openai/gpt-oss-20b 16000:14 fits, gemini-embedding-001 300:5 fits; later asks 3000:2, 1500:3 and 100:1, all fit. The first four asks (baseline, corrective, self_rag, first disconnect run) were not recorded for Groq in the ledger because of the context bug (item 2); their usage was roughly 6k tokens on gpt-oss-120b and 8k on gpt-oss-20b, estimated from the S1 per-question means and the llm_calls logged, not measured. Their embedding calls were recorded.
+10. The build-plan M12 text was not re-read in S2; apart from the differences listed in S1 and above, any others are not listed.
+11. StreamRunner's default poll raises asyncio.TimeoutError (the builtin TimeoutError in Python 3.12); the prompt's test wording "poll returns Empty" was implemented as a poll that raises it.
+
+## Abandoned-thread limitation
+After a timeout or a disconnect the worker thread cannot be interrupted: it runs until the call it is in (LLM, Tavily or embedding) returns, then sees the cancel flag at its next event, closes the pipeline stream and exits. The runner's finally and the request log do not wait for it.
+- Worst case for one Groq call before Step 2.4: timeout None, so unbounded (a hung connection).
+- After Step 2.4 with llm_timeout_s 20 and llm_max_retries 3 (the default): 4 attempts x 20 s = 80 s plus backoff 0.5 + 1 + 2 = 3.5 s, about 83.5 s. groq honours a Retry-After header of 60 s or less, which can add more.
+- With LLM_MAX_RETRIES=1 (production): 2 attempts x 20 s = 40 s plus 0.5 s backoff, about 40.5 s, inside the 50 s request limit and Vercel's 60 s maxDuration. A Retry-After of up to 60 s would still exceed it; the runner's 50 s timeout then ends the response and the thread idles until the call returns.
+- Pipelines make several calls in sequence (up to 8 for self_rag, D27); the 50 s total is enforced by the runner, not by the per-call timeout. Tavily searches (web_search_max_attempts 3, backoff 1 s and 2 s) were not given a per-call timeout here.
+- On Vercel a thread still running after the response ends may be frozen with the instance; it holds no request resources.
+
+## Known issues and limitations (S2)
+- The first request after a cold start loads the retriever and pipeline inside the worker (2 to 3 s measured locally), so pings and the 50 s budget already cover it; the first event of the first ask came at 3.3 s.
+- The trace flush after the answer keeps the connection open for up to trace_flush_timeout_s (5 s) when tracing is on and LangSmith is slow; only unit-tested with a fake flush, not run live.
+- The global counter and the per-IP check are separate Upstash calls (S1 limitation, unchanged).
+- When a client disconnects, the in-flight retrieval embedding call still happens (one Gemini request seen).
+- uvicorn spec_version 2.4 or newer changes how Starlette reports a disconnect (see Step 0). Vercel's server was not tested here (M14).
+
+## Open questions for the human (S2)
+- Confirm the llm_max_retries default of 3 (project value) rather than 2 (ChatGroq library default).
+- The unrecorded Groq usage of the first four asks (deviation 9): add an adjustment to the budget ledger, or is the estimate enough?
+
+## Proposed follow-ups (out of scope, S2)
+- A per-call timeout for Tavily searches.
+- Refund the global counter when a request ends in error, timeout or disconnect (the S1 follow-up still applies).
+- A deployed check that Vercel streams frames progressively (M14).
+
+## M14 carry-over
+- Vercel Production env vars, alongside GROQ_API_KEY, GOOGLE_API_KEY, TAVILY_API_KEY and the LangSmith settings:
+  - RAGDOCS_ENV=production.
+  - IP_HASH_SALT: a random 32-byte hex value that Bilal generates (for example `.venv\Scripts\python -c "import secrets; print(secrets.token_hex(32))"`); never commit it.
+  - LLM_MAX_RETRIES=1, so one call takes at most 2 x 20 = 40 s plus 0.5 s backoff and stays inside the 50 s request limit.
+  - Upstash: Settings reads UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN. If the Vercel Upstash integration provides KV_REST_API_URL and KV_REST_API_TOKEN instead, add the two UPSTASH_ names as aliases (or copy the values); the lifespan check fails production startup when either is missing.
+  - LANGSMITH_TRACING stays false by default (D18); if turned on, LANGSMITH_TRACING_SAMPLING_RATE must be 0.1 or lower.
+- D28: the limiter fails closed (503 "The service is temporarily unavailable.") when Upstash is unreachable or errors. Check that Upstash is reachable from the Vercel region before launch.
+- build_redis sets the Upstash timeout through a private attribute of the pinned upstash-redis 1.8.0 (`redis._http._client.timeout`); an upgrade must re-check it (a test builds a real limiter to catch a rename).
+- Deployed checks: progressive frames through Vercel's Python runtime (tools/sse_probe.py --base-url), the disconnect log line, X-Forwarded-For handling, and that the INFO log lines appear in Vercel's logs (configure_request_logging writes to stderr).
+- Remove GET /api/deps-probe (S1 note).
+- api/index.py and vercel.json are unchanged. Check that the function bundle includes src/ragdocs/api/stream.py, and that vercel.json maxDuration (60) is at least request_timeout_s plus trace_flush_timeout_s (50 + 5 = 55).
+
+## Prerequisites for the next module (M13)
+- Build the trace UI against the contract above. public/index.html currently is the M01 skeleton.

@@ -71,7 +71,8 @@ def get_chat_model(
             model=model_name,
             api_key=api_key,
             temperature=0,
-            max_retries=3,
+            max_retries=settings.llm_max_retries,
+            timeout=settings.llm_timeout_s,
         )
 
     if role == "grader":
@@ -81,7 +82,8 @@ def get_chat_model(
             model=model_name,
             api_key=api_key,
             temperature=0,
-            max_retries=3,
+            max_retries=settings.llm_max_retries,
+            timeout=settings.llm_timeout_s,
         )
 
     if role == "judge":
