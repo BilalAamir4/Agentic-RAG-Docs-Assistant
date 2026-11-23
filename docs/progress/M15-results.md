@@ -1,6 +1,6 @@
 # M15: Results and write-up
 
-Status: Partial (session 1 of 2)
+Status: Done
 Date: 2026-11-23
 
 ## Goal
@@ -219,7 +219,7 @@ No failed item in the committed runs is a hallucinated unanswerable, grading_dro
 - Citation support rows compare counts of judged items whose n differs (39/39/38); the README says so.
 - Failure proposals are keyword heuristics; the human decides every label.
 
-## Open questions for the human
+## Open questions for the human (session 1, answered in session 2)
 
 - Read results/failure_review.md: 15 rows. The two proposed labels (corrective q034, self_rag q033) need a decision; the other 13 are automatic and pre-filled.
 
@@ -239,3 +239,76 @@ Bilal's answer on the 15 rows (format at the top of results/failure_review.md). 
 - Where each number lives: pipeline metrics in `summarize(run_dir)["overall"]` (fields in 1e) and results/runs/<run>/summary.json; paired and count verdicts in the README block and the results/summary.md "Paired" section; ablation in results/runs/retrieval-20261025/per_question.jsonl and table.md; web page numbers in web/public/results.json; mechanics (self-RAG path counts, q028, q049, regenerated items q006 q017 q032 q034) in results/analysis_notes.md; D6 gate in DECISIONS.md D6; judge audit in D9 and results/judge_audit.md; RAGAS validity caveat in D19.
 - Example ids for 1f: out_of_scope q028 (self_rag); structured failure q049 (self_rag, corrective); used_web q043 (corrective), q025 (self_rag); first retrieval event q006; fallbacks: none committed.
 - Screenshots in docs/screenshots/: langsmith-baseline-experiment.png, langsmith-baseline-trace.png, langsmith-baseline-vs-corrective.png, langsmith-corrective-trace.png, langsmith-eval-item.png, langsmith-self-rag-trace.png, langsmith-three-way-comparison.png, prod-baseline.png, ui-baseline.png, ui-corrective.png, ui-dark.png, ui-mobile.png, ui-s1-static.png, ui-self-rag.png.
+
+## Session 2
+
+### Prechecks
+- git status clean; HEAD 2cee064 (S1); origin/main e8d8f52; status line changed from "Partial (session 1 of 2)" to "In progress (session 2 of 2)", now Done.
+- LABEL DECISIONS were filled in (self_rag q033 judge_disagreement; all other rows OK).
+- Claude in Chrome: the tools were loaded, but tabs_context_mcp returned "Browser extension is not connected". Not retried. Consequence: no demo GIF (README uses docs/screenshots/ui-self-rag.png), and the GitHub README render check is left to Bilal.
+
+### Labels applied (results/failure_labels.csv; failure_breakdown.py not rerun)
+- corrective q034: needs_label to final_label unfaithful_generation (the proposal, "all other rows OK"). self_rag q033: judge_disagreement. The other 13 rows kept their pre-filled labels. 15 rows, every final_label in the allowed list, no CR characters.
+
+| final_label | baseline | corrective | self_rag |
+|---|---|---|---|
+| retrieval_miss | 3 | 3 | 3 |
+| false_abstention | 1 | 1 | 1 |
+| router_out_of_scope | 0 | 0 | 1 |
+| unfaithful_generation | 0 | 1 | 0 |
+| judge_disagreement | 0 | 0 | 1 |
+| failed items | 4 | 5 | 6 |
+
+### Files
+- docs/failure-analysis.md (new), README.md (prose around the generated block), docs/cv-bullets.txt (new, 3 lines of 27, 32 and 31 words), results/failure_labels.csv (two final_label cells).
+
+### Demo GIF and shot list
+- No GIF (Chrome extension not connected). Budget check run first (gpt-oss-120b 12,000 tokens 6 requests, gpt-oss-20b 12,000 tokens 8 requests, gemini-embedding-001 500 tokens 4 requests: all fit); no asks were made. 0 production asks.
+- 20-second shot list: (1) 1280 px wide viewport on the production URL, 2 s. (2) Click the "Version change" example, pipeline baseline, press Ask, show the trace rows and the answer with Sources, 7 s. (3) Select self_rag, press Ask on the same example, show the longer trace (decide_retrieval, retrieve, grade_documents, generate, verify_answer) and the answer, 9 s. (4) Hold 2 s on the answer so the trace difference is visible.
+
+### Number trace
+| # | Number or claim | Where used | Source and field |
+|---|---|---|---|
+| 1 | 50 questions, 42 answerable, 8 unanswerable | README Key findings, cv, failure-analysis | results/summary.md "Overall": items 50, answerable n 42; unanswerable = 50 - 42; per_question.jsonl category counts |
+| 2 | Correct answers 38 / 37 / 36 of 42 (baseline / corrective / self_rag) | README, cv, failure-analysis | results/summary.md Overall row "correct (correctness = 2)": 38/42, 37/42, 36/42 |
+| 3 | Differences -1, -1, -2 under the 3-question threshold = no measurable difference | README, failure-analysis | results/summary.md Overall (37-38, 36-38, 36-37); results/analysis_notes.md section 4 count table; threshold from Settings.compare_noise_margin = 3 and D19 |
+| 4 | Baseline left 4 of 42 not correct: q008, q024, q025, q029 | README, failure-analysis | 42 - 38 = 4; results/failure_labels.csv rows pipeline=baseline (q008, q024, q025, q029) |
+| 5 | Neither technique fixed any of those 4 | README, failure-analysis | results/runs/*/per_question.jsonl scores.correctness for q008, q024, q025, q029: baseline 0,1,0,0; corrective 0,0,0,0; self_rag 0,1,0,0 (none is 2); results/summary.md "Changed questions" |
+| 6 | corrective broke q024 (1 to 0) and q034 (2 to 1) | README, failure-analysis | results/summary.md "Changed questions" corrective section |
+| 7 | self_rag broke q028 (2 to 0) and q033 (2 to 1) | README, failure-analysis | results/summary.md "Changed questions" self_rag section |
+| 8 | Mean tokens per question 2,334 / 4,577 / 6,847 (n=50) | README, cv, failure-analysis | results/summary.md Overall "mean tokens per question": 2333.560, 4577.300, 6847.080 |
+| 9 | p95 latency 3.7 / 8.0 / 9.2 s | README, failure-analysis | results/summary.md Overall "p95 latency_ms": 3734, 8002, 9203 ms |
+| 10 | Web search used 8 of 50 (corrective), 7 of 50 (self_rag), 0 of 50 (baseline); measurable (+8), (+7) | README, failure-analysis | results/summary.md Overall used_web; results/analysis_notes.md section 4 |
+| 11 | RAGAS: no measurable difference for any pair, paired n 38 to 41; wins minus losses at most 2 in absolute value | README, failure-analysis | results/summary.md "Paired" sections: faithfulness n=38 (2/3, 3/4), response_relevancy n=38 (1/0, 1/0), context_precision n=41 (2/1, 2/0), context_recall n=41 (0/1, 0/1); S vs C from analysis_notes.md section 4 (4/3, 1/0, 1/0, 0/0) |
+| 12 | D6 gate: hybrid hit@5 34/42, hybrid_rerank 35/42, gain 1, threshold 3; hit@1 22 to 17 of 42 | README, failure-analysis | results/runs/retrieval-20261025/table.md; docs/DECISIONS.md D6 gate decision |
+| 13 | Counts per label per pipeline (retrieval_miss 3/3/3 = 9; false_abstention 1/1/1 = 3; router_out_of_scope 0/0/1; unfaithful_generation 0/1/0; judge_disagreement 0/0/1; failed items 4/5/6; 15 rows) | failure-analysis | results/failure_labels.csv, column final_label grouped by pipeline (15 rows) |
+| 14 | q028: baseline 2, corrective 2, self_rag 0; no retrieval event; self_rag first-retrieval hit@5 33/42 vs corrective 34/42 | failure-analysis | per_question.jsonl scores.correctness; results/analysis_notes.md section 3; summary.md Overall first-retrieval hit@5 |
+| 15 | q034: corrective 1, self_rag 2, baseline 2; self_rag regenerated once; RAGAS faithfulness corrective 0.727 | failure-analysis | per_question.jsonl q034 all three runs; results/failure_labels.csv ragas_faithfulness; analysis_notes.md section 1 and 3 |
+| 16 | q033 self_rag judge correctness 1, citation_support 0; RAGAS faithfulness 1.000 | failure-analysis, README | results/failure_labels.csv self_rag q033 (ragas_faithfulness, note); runs/self_rag-20261121-0744/judge_v2.jsonl |
+| 17 | q024: baseline 1, corrective 0, self_rag 1; corrective kept 1 of 5 chunks, self_rag kept 2 of 5 | failure-analysis | per_question.jsonl scores; results/failure_review.md q024 trace lines |
+| 18 | Regeneration ran on 4 of 50 items (q006, q017, q032, q034); only q034 changed its outcome | failure-analysis | results/analysis_notes.md section 3 table and section 1 |
+| 19 | Hand audit 11 items, correctness agreement 10/11, citation support 11/11; baseline run only | README, failure-analysis | docs/DECISIONS.md D9 audit result; results/judge_audit.md |
+| 20 | RAGAS sanity check 0.896 (8 items) vs 0.963 (3 items) | README | docs/progress/M09-ragas-experiments.md; docs/DECISIONS.md D19 update |
+| 21 | Eval set 28 single, 8 multi, 6 version, 8 unanswerable; 11 of 42 real-sourced | README | data/eval/README.md composition table; D14 |
+| 22 | Cap: 5 questions per hour per IP, 32 per day | README | src/ragdocs/config.py rate_limit_per_ip_per_hour = 5, daily_global_cap = 32 |
+| 23 | Corpus: commit a6e223d2f67558caa20589a03443e918b582943b, 41 pages, 553 chunks | README | data/index/manifest.json |
+| 24 | Token ratios "about 2 and 3 times" | cv | 4577.300 / 2333.560 = 1.96; 6847.080 / 2333.560 = 2.93 (computed from the summary.md values) |
+| 25 | cv-bullets word counts 27, 32, 31 (each under 35) | cv | awk field count on docs/cv-bullets.txt |
+
+
+### Independent check (separate general-purpose agent)
+Given: the three files, the table above, the noise rules and the source paths. Report, summarised:
+- Task 1: one mismatch. failure-analysis.md (judge_disagreement) offered a second reading, that the answer used only graph.stream(subgraphs=True); the stored full answer also contains a stream_events(version="v3") snippet reading stream.subgraphs, as the reference does. The 600-character excerpt in failure_review.md hid it. Fixed: paragraph rewritten.
+- Wording issues, all fixed: README "three multi-hop questions need evidence from several chunks" now says q031, q032 and q036 have gold sections that resolve to 6, 4 and 4 chunks (M03 line 241); q029 "failure is in generation over multi-chunk evidence" replaced by "the files do not show why the generator abstained"; q024 sentence now gives both judge rationales; "the two measurable differences" reworded (cost has no verdict); README CI list says "audit of the frontend runtime dependencies"; README key findings flags q033 as a judge disagreement.
+- Stale file noted: results/failure_review.md still shows q033 as unfaithful_generation (proposed) because it is the generated file from before the decisions; not regenerated (it would reset final_label). failure-analysis.md says so.
+- Tasks 2 to 5 (noise verdicts, better/worse claims, adjectives, cv-bullets rules): no mismatches. The v1.0 tag listed in the README does not exist yet (created at the end of the session).
+
+### Verification
+- Before this file was written: py tasks.py lint -> 187 files already formatted, ruff checks pass; py tasks.py test -> 525 passed, 1 deselected in 30.34s; py tasks.py readme --check -> README results block is up to date.
+- CI results, the production smoke, the secret scan and the v1.0 tag happen after this file is committed and are reported in the final message of the session, not here.
+
+### Differences from the build-plan spec
+- The build-plan M15 spec was not available (S1 recorded this); the session prompt was the contract. No other differences known.
+
+### Decisions made
+- Failure labels follow Bilal's answers; the LangSmith links in failure-analysis.md are run ids because no trace URL is committed for the failed items.
