@@ -1,0 +1,16 @@
+pipeline,id,category,correctness,auto_label,auto_reason,proposed_label,final_label,note,ragas_faithfulness
+baseline,q008,single,0,retrieval_miss,gold anchor checkpointers.mdx#get-state-history not in first top 5,,retrieval_miss,,
+baseline,q024,single,1,retrieval_miss,gold anchor errors/INVALID_CONCURRENT_GRAPH_UPDATE.mdx# not in first top 5,,retrieval_miss,,0.889
+baseline,q025,single,0,retrieval_miss,gold anchor errors/INVALID_GRAPH_NODE_RETURN_VALUE.mdx# not in first top 5,,retrieval_miss,,
+baseline,q029,multi,0,false_abstention,abstained although the documentation answers it,,false_abstention,,
+corrective,q008,single,0,retrieval_miss,gold anchor checkpointers.mdx#get-state-history not in first top 5,,retrieval_miss,,
+corrective,q024,single,0,retrieval_miss,gold anchor errors/INVALID_CONCURRENT_GRAPH_UPDATE.mdx# not in first top 5,,retrieval_miss,,0.286
+corrective,q025,single,0,retrieval_miss,gold anchor errors/INVALID_GRAPH_NODE_RETURN_VALUE.mdx# not in first top 5,,retrieval_miss,,
+corrective,q029,multi,0,false_abstention,abstained although the documentation answers it,,false_abstention,,
+corrective,q034,multi,1,needs_label,,unfaithful_generation,,"Judge: ""The assistant correctly describes reading state with get_state. However, it invents an incorrect API for updating state by suggesting an '@update_state' decorator on a node function, rather than using graph.update_state(config, values). Additionally, the claim about the edit node lacks citation support since excerpt 4 discusses update_state differently."" RAGAS faithfulness 0.727 (low) supports this.",0.727
+self_rag,q008,single,0,retrieval_miss,gold anchor checkpointers.mdx#get-state-history not in first top 5,,retrieval_miss,,
+self_rag,q024,single,1,retrieval_miss,gold anchor errors/INVALID_CONCURRENT_GRAPH_UPDATE.mdx# not in first top 5,,retrieval_miss,,0.857
+self_rag,q025,single,0,retrieval_miss,gold anchor errors/INVALID_GRAPH_NODE_RETURN_VALUE.mdx# not in first top 5,,retrieval_miss,,
+self_rag,q028,single,0,router_out_of_scope,decide_retrieval routed the question to out_of_scope,,router_out_of_scope,,
+self_rag,q029,multi,0,false_abstention,abstained although the documentation answers it,,false_abstention,,
+self_rag,q033,multi,1,needs_label,,unfaithful_generation,,"Judge: ""The assistant provides a working example using stream() with subgraphs=True, but invents a stream.subgraphs property on stream_events output which doesn't exist in the provided excerpt or API, hallucinating the stream_events snippet."" RAGAS faithfulness 1.000 does not flag it (a prose-level signal that does not check code blocks, D19).",1.000

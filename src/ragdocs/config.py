@@ -202,6 +202,8 @@ class Settings(BaseSettings):
     # the difference exceeds the threshold; a direction is reported only when wins minus
     # losses (or losses minus wins) reaches the margin.
     compare_paired_threshold: float = 0.2
+    # D6 reranker gate (M05): reranking stays off unless hit@5 gains at least this many questions.
+    rerank_gate_min_gain: int = 3
     compare_noise_margin: int = 3
     eval_set_sha256: str = "316b1d683050e426ad5bf2324b9ca7211d30ea2566276320489e6acb538a470f"
     eval_set_tag: str = "eval-set-v1"

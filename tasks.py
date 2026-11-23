@@ -327,6 +327,14 @@ def cmd_compare(args: argparse.Namespace, extra_args: list[str]) -> int:
     return run_command(cmd + extra_args)
 
 
+def cmd_readme(args: argparse.Namespace, extra_args: list[str]) -> int:
+    """Write or check the generated results block in README.md (M15)."""
+    py = ensure_venv_exists()
+    cmd = [str(py), str(REPO_ROOT / "scripts" / "render_readme_results.py")]
+    cmd.append("--check" if args.check else "--write")
+    return run_command(cmd + extra_args)
+
+
 def cmd_validate_eval(args: argparse.Namespace, extra_args: list[str]) -> int:
     py = ensure_venv_exists()
     script = REPO_ROOT / "scripts" / "validate_eval.py"
@@ -498,6 +506,8 @@ def main() -> int:
     compare_parser = subparsers.add_parser("compare", help="Compare run folders")
     compare_parser.add_argument("run_dirs", nargs="+", help="Run folders; first is the base")
 
+    readme_parser = subparsers.add_parser("readme", help="Write or check the README results block")
+    readme_parser.add_argument("--check", action="store_true", help="Fail if the block is stale")
     val_eval_parser = subparsers.add_parser("validate-eval", help="Validate evaluation set")
     val_eval_parser.add_argument(
         "--require-verified", action="store_true", help="Require verified flag"
@@ -553,6 +563,7 @@ def main() -> int:
         "ls-dataset": cmd_ls_dataset,
         "experiment": cmd_experiment,
         "compare": cmd_compare,
+        "readme": cmd_readme,
         "budget": cmd_budget,
         "validate-eval": cmd_validate_eval,
         "verify-sources": cmd_verify_sources,

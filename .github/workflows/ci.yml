@@ -48,6 +48,8 @@ jobs:
         run: python tasks.py lint
       - name: Test
         run: python tasks.py test
+      - name: README results block is up to date
+        run: python tasks.py readme --check
       - name: Bundle size
         run: python tasks.py bundle-check
       - name: Install frontend dependencies

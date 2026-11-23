@@ -19,4 +19,4 @@ Index of implementation modules and their delivery tracking status.
 | M12 | Streaming API | Done | 2026-11-22 | [M12-api.md](M12-api.md) |
 | M13 | Trace UI | Done | 2026-11-22 | [M13-trace-ui.md](M13-trace-ui.md) |
 | M14 | Production deploy | Done | 2026-11-23 | [M14-production-deploy.md](M14-production-deploy.md) |
-| M15 | Results and write-up | Not started | - | - |
+| M15 | Results and write-up | Partial (session 1 of 2) | 2026-11-23 | [M15-results.md](M15-results.md) |

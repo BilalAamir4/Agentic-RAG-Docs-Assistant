@@ -154,6 +154,12 @@ def noise_verdict(wins: int, losses: int, margin: int) -> str:
     return NO_DIFFERENCE
 
 
+def count_verdict(base_count: float, other_count: float, margin: int) -> str:
+    """D19 for counts of questions: a difference under margin questions is no difference."""
+    diff = int(round(other_count - base_count))
+    return NO_DIFFERENCE if abs(diff) < margin else f"measurable ({diff:+d})"
+
+
 def paired_compare(
     base: dict[str, float],
     other: dict[str, float],
