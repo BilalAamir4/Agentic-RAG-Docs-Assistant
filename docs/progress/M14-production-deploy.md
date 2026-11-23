@@ -1,5 +1,5 @@
 # M14: Production deploy
-Status: Partial (session 1 of 2)
+Status: Done
 Date: 2026-11-23
 
 ## Goal
@@ -269,3 +269,137 @@ Smoke usage after deploy
 
 Upstash private-attribute note (carry-over 6)
 `build_redis` sets the Upstash timeout through a private attribute of the pinned upstash-redis 1.8.0 (`redis._http._client.timeout`). No change in M14. Any upgrade of upstash-redis must re-check it; a test added in M12 builds a real limiter to catch a rename.
+
+
+---
+
+# Session 2 of 2: push and production deploy
+Date: 2026-11-23 (times below are Asia/Karachi, UTC+5, unless marked UTC). Module prompt: "M14 (2/2)", given by the human on 2026-11-23. Production URL: https://agentic-rag-docs-assistant.vercel.app
+
+## Step 0 prechecks
+- `git status`: clean (docs/audit/ was not present). HEAD 305e1a1639109b8734d5229d2a179530dc8f4f37. This file said "Partial (session 1 of 2)"; changed to "In progress (session 2 of 2)".
+- `git fetch origin`: origin/main 04b903aad52160afb3a2b8d42f9e0f0d3467e4b4; `git merge-base --is-ancestor origin/main HEAD`: exit 0. `git ls-remote --tags origin`: eval-set-v1 (peeled c92688dd) and v1-baseline (peeled a33490b1) present with the targets in the S1 table; v2-agentic absent. Matches CONTEXT.
+- `tools/secret_scan.py --range origin/main..HEAD`: "26 blobs, 0.46 MB", "findings: 0".
+- Browser: Claude in Chrome connected. It disconnected once between 1A and 1C and was reconnected by the human; the new session could not control the old tab group, so a fresh tab was used. The Vercel and GitHub dashboards were signed in; no sign-in was requested.
+
+## Step 1A: Vercel setup before the push (read-only; all values from the pages named)
+| item | value | page |
+|---|---|---|
+| Git repository | BilalAamir4/Agentic-RAG-Docs-Assistant, connected Oct 12 | Settings > Git |
+| Production branch | main (the Production environment tracks main; domains: agentic-rag-docs-assistant.vercel.app +2) | Settings > Environments |
+| Framework preset | Other | Settings > Build and Deployment |
+| Build, Output, Install, Development command overrides | all four off | same |
+| Root directory | `./` (default); include files outside the root: on; skip unchanged deployments: on | same |
+| Node.js version | 24.x (Vercel does not run npm here) | same |
+| Build machine | Basic (2 vCPU, 8 GB) | same |
+| Function region | iad1 (Washington, D.C.); Hobby allows 1 region | Settings > Functions |
+| Fluid compute, function CPU | enabled; Standard (1 vCPU, 2 GB) | Settings > Functions |
+| Deployment Protection | Vercel Authentication: Standard Protection (protects all but production domains); no password, no trusted IPs; protected sourcemaps on. `curl.exe -I /` returned 200 (public). | Settings > Deployment Protection |
+| Project env vars before | RAGDOCS_ENV only, Production | Settings > Environment Variables |
+| Shared env vars | none linked | same, Shared tab |
+| Integrations, Storage | none installed, no database connected | Integrations, Storage |
+| Production deployment before the push | 04b903a "M13: trace UI", Ready, 24 s, created about 3 h earlier | Deployments |
+- The old production deployment answered `/api/health` with FUNCTION_INVOCATION_FAILED (no keys): expected.
+- Stop checks: repository and branch correct; no override runs npm or a build; production is public. None triggered.
+
+## Step 1C: Production environment variables after "env ready"
+Names and environments only; no value was opened (the two non-sensitive variables LLM_MAX_RETRIES and LANGSMITH_TRACING show a masked value with an eye icon; it was not clicked).
+| name | environments | set by |
+|---|---|---|
+| GROQ_API_KEY, GOOGLE_API_KEY, TAVILY_API_KEY, IP_HASH_SALT | Production | the human (Sensitive) |
+| RAGDOCS_ENV, LANGSMITH_TRACING, LLM_MAX_RETRIES | Production | the human |
+| KV_REST_API_URL, KV_REST_API_TOKEN | Production | Upstash integration |
+| KV_REST_API_READ_ONLY_TOKEN | Production | Upstash integration (never read by Settings) |
+| KV_URL, REDIS_URL | Production | Upstash integration (not in the S1 table; the human decided to leave them: integration-owned, never read by the app) |
+- Shared tab: none. No name from the "Do not set" list applies to Production. No UPSTASH_REDIS_REST_* variable exists, so the KV_ pair is the one Settings reads.
+- Settled S1 checks: the integration injects KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN (the read-only token's name), KV_URL and REDIS_URL. The connect dialog offered a custom prefix field; the human left it empty (default), and the names carry no prefix. The database region was chosen next to iad1; the function runs in iad1 (`x-vercel-id` shows iad1).
+
+## Step 2: push, CI and deployment
+- First `git push origin main --follow-tags` was rejected by GitHub: "refusing to allow an OAuth App to create or update workflow `.github/workflows/ci.yml` without `workflow` scope". Nothing was pushed. The stored credential came from Git Credential Manager (`credential.helper=manager`); the gh login had the scopes gist, read:org, repo. The human ran `gh auth refresh -h github.com -s workflow` and `gh auth setup-git`; the retry succeeded.
+- Push at 03:09:46 (22:09:46 UTC): `04b903a..305e1a1  main -> main`. Commit range pushed: ef0151a, 7aa5c2e, 305e1a1 (the three M14 session 1 commits). `git ls-remote origin refs/heads/main` = 305e1a1639109b8734d5229d2a179530dc8f4f37 = HEAD. Tags on origin, peeled targets equal to local: eval-set-v1 c92688dd35816e0133517033f53db22d3b233396, v1-baseline a33490b14ba96dada0750a4082226fda09a0b8a2, v2-agentic 56a5043633f81822900d2e9cf6856f6db2059f80 (tag object 14eaca22fec1e1dd1d00400443e4d59b4d1abe56). No fix commits were needed for CI.
+- CI (workflow "CI", run https://github.com/BilalAamir4/Agentic-RAG-Docs-Assistant/actions/runs/45076143376), polled every 60 s with the unauthenticated API (5 polls):
+  | job | conclusion | duration | url |
+  |---|---|---|---|
+  | test (ubuntu-latest) | success | 65 s (22:09:49Z to 22:10:54Z) | https://github.com/BilalAamir4/Agentic-RAG-Docs-Assistant/actions/runs/45076143376/job/137373678604 |
+  | test (windows-latest) | success | 201 s (22:09:50Z to 22:13:11Z) | https://github.com/BilalAamir4/Agentic-RAG-Docs-Assistant/actions/runs/45076143376/job/137373678818 |
+  Step detail (jobs API): on Ubuntu all 14 steps succeeded (setup 24 s, test 15 s, bundle size 9 s, frontend install 4 s, public/ freshness 0 s, audit 0 s). On Windows steps 1 to 12 succeeded and steps 13 (public/ matches a fresh build) and 14 (npm audit) were skipped by design: ci.yml lines 62 and 70 have `if: runner.os == 'Linux'`. So Ubuntu and a cold-cache Windows run are now proven.
+- Vercel deployment for 305e1a1 (https://vercel.com/bilal-aamir1/agentic-rag-docs-assistant/5idQNahNspowHdM87tSkMfGt5bJo): Ready, 25 s, Production, Current. Build log (31 lines): restored the build cache of the previous deployment; "Running vercel build", Vercel CLI 66.2.0; "Using Python 3.12 from .python-version"; "Using uv 0.13.5"; "Installing required dependencies from requirements.txt..."; "Compiling Python bytecode..."; "Optimizing Python bundle..."; "Build Completed in /vercel/output [8s]"; build cache 57.92 MB. No warning lines. The first lines list the uploaded files, including data/eval/*; the function bundle itself is limited by includeFiles.
+- Function (Resources tab): /api/index, IAD1, Python 3.12, 75.3 MB, max duration 60 s. Runtime `/api/health` reports python 3.12.16, commit 305e1a1, env production.
+
+## Step 3.1: smoke test (`py tasks.py smoke --url https://agentic-rag-docs-assistant.vercel.app`, 03:14 to 03:15, exit 0)
+```
+check                       result  detail
+1 GET / page and CSP        PASS    200 text/html, title, CSP
+2 GET / security headers    PASS    4 headers match
+3 /assets cache headers     PASS    /assets/index-BHnsNVU9.js and /assets/index-BFdCzbOP.css
+4 /results.json             PASS    3 pipelines, cache 300 s
+5 /api/health               PASS    ok, env production, commit 305e1a1
+6 /api/pipelines            PASS    baseline, corrective, self_rag
+7 /api/deps-probe is gone   PASS    404
+8 POST /api/ask validation  PASS    422
+9 ask baseline              PASS    first event 2.0s, total 3.4s, 5 events
+9 ask corrective            PASS    first event 1.2s, total 3.4s, 11 events
+9 ask self_rag              PASS    first event 0.7s, total 3.5s, 17 events
+```
+Header precedence (settled): "/(.*)" matches "/" (checks 1 and 2 pass on GET /). No two rules set the same header on one path, so precedence stayed untested. `curl.exe -i` on /api/health and on a 429 shows the vercel.json headers (Content-Security-Policy, Permissions-Policy, Referrer-Policy, Strict-Transport-Security, X-Content-Type-Options) on /api/ responses too. The JSON responses carry `Cache-Control: public, max-age=0, must-revalidate` (Vercel's default; the function sets none on JSON). The SSE response's own Cache-Control ("no-cache, no-transform") is checked in Step 3.6: see below.
+
+SSE response headers (Step 3.6, one more baseline ask with the q001 question at about 20:19 PKT, `curl.exe -i -N` with the JSON body on stdin through `--data-binary "@-"`; body discarded, status line and headers kept):
+```
+HTTP/1.1 200 OK
+Cache-Control: no-cache, no-transform
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'
+Content-Type: text/event-stream; charset=utf-8
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Referrer-Policy: strict-origin-when-cross-origin
+Server: Vercel
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Accel-Buffering: no
+X-Content-Type-Options: nosniff
+X-Vercel-Cache: MISS
+X-Vercel-Id: bom1::iad1::...
+Transfer-Encoding: chunked
+```
+(Date and the unique part of X-Vercel-Id omitted.) Result: Content-Type is text/event-stream, the function's own Cache-Control "no-cache, no-transform" is kept (vercel.json has no Cache-Control rule for /api/), X-Accel-Buffering is "no", and the four vercel.json security headers (Content-Security-Policy, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) are present on the SSE response, as is Strict-Transport-Security (added by Vercel; not in vercel.json).
+
+## Step 3.2: browser check (Chrome, 03:17)
+- Viewport: resize_window reported 1280x900 but `innerWidth` stayed 1920 (as in M13). The layout is capped at 1200 px, so the content width is the same.
+- Console: read_console_messages (tracking started before a reload) returned no messages; a `securitypolicyviolation` listener installed after load recorded 0 events.
+- Page: title "LangGraph Docs Assistant"; 3 pipeline radios; results table 14 body rows.
+- "Version change" example (q009) on baseline, real click on Ask, MutationObserver on the document: trace rows added at 5334, 5511, 5511, 6711, 6711 ms after the observer started, 3 distinct times (types: node_start, retrieval, node_start, node_end, summary). Frames are not buffered. The answer rendered (DeltaChannel text and a code block) and "Sources" lists Checkpointers and LangGraph runtime; trace footer "Total 1.4 s, 1 LLM calls, no web search".
+- Screenshot: docs/screenshots/prod-baseline.png (1568x764, the production page only, dark scheme). The Chrome tool saved a JPEG; it was converted to PNG with System.Drawing (no Pillow in the venv). No dashboard screenshot was saved.
+
+## Step 3.3: rate limit (tools/sse_probe.py, baseline, q001 question, 2 s apart)
+Valid asks from this IP in the window before this item: smoke 3, browser 1 (the 422 validation request does not count).
+| request | time | status | detail |
+|---|---|---|---|
+| 1 (5th valid ask of the window) | 03:16:26 | 200 | first event 0.7 s, total 1.9 s, 4 trace events, ends in answer |
+| 2 | 03:16:29 | 429 | `Retry-After: 2612`; body `{"error":"Rate limit reached. Try again later.","retry_after_s":2612}` |
+Pass: the first non-200 is a 429, the body text is exact, n = 2612 (between 1 and 3600), Retry-After equals n. One extra `curl.exe -i` POST at 03:16:40 returned 429 with Retry-After 2600 (n counts down as the window runs out); it used no quota. The per-IP window is aligned to the clock hour in UTC; the human's IP stays limited until about 04:00 (23:00 UTC). Valid asks used so far in this session: 5 of the 12 allowed.
+
+## Step 3.4: log privacy (Vercel Runtime Logs, Production, last hour)
+- All 51 log lines in the window were Production (Preview 0). Level counts: Info 49, Warning 0, Error 2 (the two Error lines pre-date the push: they come from the old deployment answering `/api/health` with FUNCTION_INVOCATION_FAILED; not opened further).
+- Search terms and matches: `GRAPH_RECURSION_LIMIT` (the longest word of the q001 question, 21 characters, underscores counted as word characters): 0 matches; `RECURSION`: 0 (Production filter on); `incremental` (longest word of the browser question): 0. Positive control: `baseline` matched 12 Info lines, so the search does reach message text. (`outcome=answer` returned 0 because Vercel rewrites it into a field query; not a valid control.)
+- Request log line for one /api/ask request, in full: `2026-11-22 22:14:26,434 INFO ragdocs.api: pipeline=baseline outcome=answer latency_ms=3088 llm_calls=1 used_web=false question_chars=80` (also shown without the logger prefix). The 429 line: `pipeline=baseline outcome=limited latency_ms=3 llm_calls=- used_web=- question_chars=80 limit_reason=ip`. Nine /api/ask lines for nine requests. Only the fields M12 defined; no question text, no answer text, no IP.
+- Other lines: httpx INFO lines `HTTP Request: POST <url> "HTTP/1.1 200 OK"` for api.groq.com (chat/completions), generativelanguage.googleapis.com (batchEmbedContents) and the Upstash database host. They carry no key, token or query string. They do show the Upstash database hostname (not a credential). Nothing looked like a key or token.
+
+## Step 3.5: bundle size
+- `py tasks.py bundle-check`: "Total bundle size: 230.40 MB (limit: 400.00 MB)" (installed size, unchanged since M12).
+- What the two figures measure (not changed; neither tool was edited). `tools/bundle_size.py` (read for this note): runs `pip install --target` for requirements.txt with the Linux wheel platforms (manylinux2014_x86_64 and manylinux_2_28_x86_64), Python 3.12, binary wheels only, into a temporary directory; copies `src/` and `data/index/` next to it; then sums the byte sizes of every file there and divides by 1024 x 1024. So 230.40 MB is the uncompressed size of the installed dependency files plus src/ plus the index, in MiB, checked against a 400 MB limit; it measures our own estimate of the bundle, not anything Vercel reports. Vercel's 75.3 MB is the value in the "Size" column for /api/index on the deployment's Resources tab (the column header is just "Size"; the page gives no further description). The page does not say whether it is compressed, so I do not claim that; the gap (75.3 versus 230.40) is consistent with a compressed size, but I did not verify it, and Vercel's own limits were not compared to either number here.
+- Vercel, deployment 5idQNahNs, Resources: /api/index 75.3 MB. Static assets: 5 files (index-BFdCzbOP.css 44.9 kB, index-BHnsNVU9.js 319 kB, favicon.svg 9.52 kB, index.html 703 B, results.json 9.94 kB). The two figures measure different things (installed files before compression versus Vercel's reported function size).
+
+## Step 3.6: cold start
+Resumed 23 Nov 20:18 PKT. The last production request before it was 03:16:43 PKT the same day, so 17 h 2 min with no request; no other production request was made first. Vercel may still have kept an instance warm in that time, so "cold" is an assumption, not something the platform confirms.
+| request | start (PKT) | result |
+|---|---|---|
+| GET /api/health | 20:18:46 | 200, 3.53 s total (connect 0.17 s, first byte 3.53 s) |
+| POST /api/ask baseline, q001 question (tools/sse_probe.py) | about 20:18:49 | 200, first event 3.0 s, total 4.7 s, 4 trace events, ends in answer |
+- The health call took 3.53 s, almost all of it waiting for the first byte (connect 0.17 s). I have no warm /api/health time from this session to compare with, so I do not claim how much of the 3.5 s is cold start; it is one measurement and was not repeated.
+- The ask started 3 s after the health call finished, so the instance was already warm for it. Its 3.0 s first event is therefore not a second cold start. Compared with the warm smoke asks (first event 0.7 to 2.0 s, total 3.4 to 3.5 s; browser total 1.4 s) the first event was slower (3.0 s) and the total was 4.7 s; not isolated further.
+- Valid asks used this session: 7 of 12 (5 earlier, the probe ask and the header ask below).
+
+## Step 4 and final state
+Production deploy of 305e1a1 verified. Results (all above): CI green on ubuntu-latest and windows-latest (run 45076143376); smoke 11/11; browser check passed (progressive frames, no console or CSP errors); 429 with matching Retry-After (2612); no question text in Vercel logs (0 matches, positive control matched); SSE headers correct; cold-start timings recorded; bundle 230.40 MB estimated, Vercel 75.3 MB.
+- Valid production asks used in this session: 7 of 12.
+- No Vercel or GitHub setting was changed by this session; no secret value was read or printed; no force-push.
+- Close-out commit "M14: production deploy" contains this file, PROGRESS.md and docs/screenshots/prod-baseline.png. Its push, the Vercel redeploy, `py tasks.py smoke --no-asks` and the CI run for that commit happen after this file is committed, so their results are not in this file; they are in the session's final message.
+- Known issue: a Vercel Resources "Size" is not documented on the page (see 3.5). docs/audit/ did not exist in S2 or at resume.
